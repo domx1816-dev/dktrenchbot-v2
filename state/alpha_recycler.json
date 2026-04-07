@@ -1,0 +1,31 @@
+{
+  "raRBY29mxKf8oADemdUg5618xL6m5RhMLP": {
+    "last_sell": {
+      "token": "54524953",
+      "currency": "545249534B000000000000000000000000000000",
+      "issuer": "rhu8q21DEWekDcvqakABXPJbm3MAnQa8oy",
+      "token_key": "545249534B000000000000000000000000000000:rhu8q21DEWekDcvqakABXPJbm3MAnQa8oy",
+      "time": 1775543171,
+      "pnl_pct": null
+    },
+    "next_buy": null,
+    "updated": 1775543276.2844696
+  },
+  "r3QxBXQs2XZ9oMPLsjB2fkFgKTcxC5TRMq": {
+    "last_sell": {
+      "token": "42495478",
+      "currency": "4249547800000000000000000000000000000000",
+      "issuer": "rBitcoiNXev8VoVxV7pwoQx1sSfonVP9i3",
+      "token_key": "4249547800000000000000000000000000000000:rBitcoiNXev8VoVxV7pwoQx1sSfonVP9i3",
+      "time": 1775543232,
+      "pnl_pct": null
+    },
+    "next_buy": null,
+    "updated": 1775543276.2844696
+  },
+  "rDU7LXLqE7oCK2m2oby5QxWQNFxcxWyP6e": {
+    "last_sell": null,
+    "next_buy": null,
+    "updated": 1775543276.2844696
+  }
+}

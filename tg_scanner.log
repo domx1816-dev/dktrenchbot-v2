@@ -1,0 +1,113 @@
+/usr/lib/python3/dist-packages/requests/__init__.py:109: RequestsDependencyWarning: urllib3 (2.6.3) or chardet (5.1.0)/charset_normalizer (3.0.1) doesn't match a supported version!
+  warnings.warn(
+2026-04-05 19:07:57,021 [TGScan] TG Scanner Listener starting...
+2026-04-05 19:07:57,021 [TGScan] Polling @DkTrenchBot every 15s
+/usr/lib/python3/dist-packages/requests/__init__.py:109: RequestsDependencyWarning: urllib3 (2.6.3) or chardet (5.1.0)/charset_normalizer (3.0.1) doesn't match a supported version!
+  warnings.warn(
+=== PARSER TEST ===
+{
+  "symbol": "SENT",
+  "issuer": "rspYcqzdPTjaUPmWg9i1vK5LJLSyfJUpH4",
+  "holders": 244,
+  "top10_pct": 33.36,
+  "circ_supply": 972600.0,
+  "mcap_usd": 30800.0,
+  "liquidity_usd": 7500.0,
+  "sentiment": "bullish",
+  "pct_5m": 0.044000000000000004,
+  "pct_30m": 0.0698,
+  "pct_1h": 0.0698,
+  "pct_6h": -0.047400000000000005,
+  "pct_24h": 0.10980000000000001,
+  "buy_pressure_pct": 0.49,
+  "top_holders": [
+    {
+      "rank": 1,
+      "wallet": "rEwQm...",
+      "amount": 122100.0,
+      "pct": 12.56,
+      "full_address": false
+    },
+    {
+      "rank": 2,
+      "wallet": "rM6Xe...",
+      "amount": 80000.0,
+      "pct": 8.23,
+      "full_address": false
+    },
+    {
+      "rank": 3,
+      "wallet": "r93eB...",
+      "amount": 60200.0,
+      "pct": 6.19,
+      "full_address": false
+    },
+    {
+      "rank": 4,
+      "wallet": "rBvro...",
+      "amount": 32200.000000000004,
+      "pct": 3.31,
+      "full_address": false
+    },
+    {
+      "rank": 5,
+      "wallet": "rJZ7g...",
+      "amount": 30800.0,
+      "pct": 3.16,
+      "full_address": false
+    },
+    {
+      "rank": 6,
+      "wallet": "rHScq...",
+      "amount": 30500.0,
+      "pct": 3.14,
+      "full_address": false
+    },
+    {
+      "rank": 7,
+      "wallet": "r9MDf...",
+      "amount": 30400.0,
+      "pct": 3.13,
+      "full_address": false
+    },
+    {
+      "rank": 8,
+      "wallet": "rnb2V...",
+      "amount": 30400.0,
+      "pct": 3.12,
+      "full_address": false
+    },
+    {
+      "rank": 9,
+      "wallet": "rGS5P...",
+      "amount": 30000.0,
+      "pct": 3.08,
+      "full_address": false
+    },
+    {
+      "rank": 10,
+      "wallet": "r9nKz...",
+      "amount": 29400.0,
+      "pct": 3.02,
+      "full_address": false
+    }
+  ],
+  "first_scan_wallet": "ebyam_oB",
+  "first_scan_value_usd": 41600.0,
+  "source": "lite_haus",
+  "raw_ts": 1775416502.2971768,
+  "boost_reasons": [
+    "holders=244(early)",
+    "all_tf_green",
+    "5m=+4.4%",
+    "30m=+7.0%",
+    "pullback_entry",
+    "bullish",
+    "liq=15000xrp(sweet_spot)"
+  ]
+}
+
+Computed boost: +50 pts
+Reasons: ['holders=244(early)', 'all_tf_green', '5m=+4.4%', '30m=+7.0%', 'pullback_entry', 'bullish', 'liq=15000xrp(sweet_spot)']
+2026-04-05 19:15:02,297 [TGScan] TG Scanner Listener starting — Lite Haus format parser
+2026-04-05 19:15:02,297 [TGScan] Polling @DkTrenchBot every 15s

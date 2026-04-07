@@ -1,0 +1,192 @@
+[
+  {
+    "ts": 1775542933.8855178,
+    "ts_human": "2026-04-07 06:22:13 UTC",
+    "status": "ok",
+    "trades_analyzed": 10,
+    "win_analysis": {
+      "count": 2,
+      "total_pnl": 2.6301,
+      "patterns": [
+        "Best chart state for wins: pre_breakout (2/2 wins)",
+        "Best score band for wins: 60-69 (2 wins)",
+        "Average win hold time: 1.7h"
+      ],
+      "chart_states": {
+        "pre_breakout": 2
+      },
+      "score_bands": {
+        "60-69": 2
+      },
+      "best_exit_reasons": {
+        "trailing_stop_21.0%": 1,
+        "dynamic_tp_time_expired": 1
+      },
+      "avg_hold_h": 1.68,
+      "band_avg_pnl": {
+        "60-69": 1.3151
+      }
+    },
+    "loss_analysis": {
+      "count": 8,
+      "total_pnl": -10.0765,
+      "patterns": [
+        "62% of losses scored in band 50-59",
+        "100% of losses entered at chart_state=pre_breakout",
+        "Stale exits: 4 trades totaling -3.97 XRP"
+      ],
+      "score_bands": {
+        "50-59": 5,
+        "60-69": 2,
+        "70+": 1
+      },
+      "chart_states": {
+        "pre_breakout": 8
+      },
+      "worst_exit_reasons": {
+        "hard_stop": 2,
+        "stale_5.0hr": 1,
+        "breakeven_protection": 1,
+        "trailing_stop_21.7%": 1,
+        "stale_3.0hr": 1
+      },
+      "stale_count": 4,
+      "stale_pnl": -3.9659,
+      "hard_stop_count": 2,
+      "hard_stop_pnl": -3.7356,
+      "avg_hold_h": 1.94,
+      "chart_avg_pnl": {
+        "pre_breakout": -1.2596
+      }
+    },
+    "tweaks": [
+      {
+        "type": "score_threshold",
+        "current": "SCORE_TRADEABLE=42",
+        "suggested": "SCORE_TRADEABLE=50",
+        "rationale": "62% of losses scored <60",
+        "expected_impact": "Reduce low-quality entries, accept fewer trades",
+        "priority": "high"
+      },
+      {
+        "type": "chart_state_gate",
+        "issue": "100% of losses entered at chart_state=pre_breakout",
+        "suggested": "Add momentum confirmation gate for pre_breakout entries",
+        "rationale": "No chart state diversity = relying on single signal type",
+        "priority": "critical"
+      },
+      {
+        "type": "stale_exit_timer",
+        "current": "STALE_EXIT_HOURS=1.5",
+        "suggested": "STALE_EXIT_HOURS=0.97",
+        "rationale": "4 stale exits totaling -3.97 XRP. Avg loss hold: 1.9h",
+        "expected_impact": "Recover ~4.0 XRP over time by cutting dead positions earlier",
+        "priority": "high"
+      },
+      {
+        "type": "pre_breakout_confirmation",
+        "issue": "100% of losses entered at pre_breakout \u2014 signal not confirmed",
+        "suggested": "Require +3% price movement in 2 readings before entering pre_breakout",
+        "rationale": "Pre-breakout is a setup signal, not an entry signal. Need price confirmation.",
+        "priority": "critical"
+      }
+    ],
+    "critical_tweaks": 2,
+    "high_tweaks": 2
+  },
+  {
+    "ts": 1775542975.220986,
+    "ts_human": "2026-04-07 06:22:55 UTC",
+    "status": "ok",
+    "trades_analyzed": 10,
+    "win_analysis": {
+      "count": 2,
+      "total_pnl": 2.6301,
+      "patterns": [
+        "Best chart state for wins: pre_breakout (2/2 wins)",
+        "Best score band for wins: 60-69 (2 wins)",
+        "Average win hold time: 1.7h"
+      ],
+      "chart_states": {
+        "pre_breakout": 2
+      },
+      "score_bands": {
+        "60-69": 2
+      },
+      "best_exit_reasons": {
+        "trailing_stop_21.0%": 1,
+        "dynamic_tp_time_expired": 1
+      },
+      "avg_hold_h": 1.68,
+      "band_avg_pnl": {
+        "60-69": 1.3151
+      }
+    },
+    "loss_analysis": {
+      "count": 8,
+      "total_pnl": -10.0765,
+      "patterns": [
+        "62% of losses scored in band 50-59",
+        "100% of losses entered at chart_state=pre_breakout",
+        "Stale exits: 4 trades totaling -3.97 XRP"
+      ],
+      "score_bands": {
+        "50-59": 5,
+        "60-69": 2,
+        "70+": 1
+      },
+      "chart_states": {
+        "pre_breakout": 8
+      },
+      "worst_exit_reasons": {
+        "hard_stop": 2,
+        "stale_5.0hr": 1,
+        "breakeven_protection": 1,
+        "trailing_stop_21.7%": 1,
+        "stale_3.0hr": 1
+      },
+      "stale_count": 4,
+      "stale_pnl": -3.9659,
+      "hard_stop_count": 2,
+      "hard_stop_pnl": -3.7356,
+      "avg_hold_h": 1.94,
+      "chart_avg_pnl": {
+        "pre_breakout": -1.2596
+      }
+    },
+    "tweaks": [
+      {
+        "type": "score_threshold",
+        "current": "SCORE_TRADEABLE=42",
+        "suggested": "SCORE_TRADEABLE=50",
+        "rationale": "62% of losses scored <60",
+        "expected_impact": "Reduce low-quality entries, accept fewer trades",
+        "priority": "high"
+      },
+      {
+        "type": "chart_state_gate",
+        "issue": "100% of losses entered at chart_state=pre_breakout",
+        "suggested": "Add momentum confirmation gate for pre_breakout entries",
+        "rationale": "No chart state diversity = relying on single signal type",
+        "priority": "critical"
+      },
+      {
+        "type": "stale_exit_timer",
+        "current": "STALE_EXIT_HOURS=1.5",
+        "suggested": "STALE_EXIT_HOURS=0.97",
+        "rationale": "4 stale exits totaling -3.97 XRP. Avg loss hold: 1.9h",
+        "expected_impact": "Recover ~4.0 XRP over time by cutting dead positions earlier",
+        "priority": "high"
+      },
+      {
+        "type": "pre_breakout_confirmation",
+        "issue": "100% of losses entered at pre_breakout \u2014 signal not confirmed",
+        "suggested": "Require +3% price movement in 2 readings before entering pre_breakout",
+        "rationale": "Pre-breakout is a setup signal, not an entry signal. Need price confirmation.",
+        "priority": "critical"
+      }
+    ],
+    "critical_tweaks": 2,
+    "high_tweaks": 2
+  }
+]

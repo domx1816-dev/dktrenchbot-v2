@@ -1,0 +1,149 @@
+[
+  {
+    "ts": "2026-04-04T19:58:09.235118+00:00",
+    "agent": "DKTrench",
+    "symbol": "PHX",
+    "message": "Loss exit -15.5% [hard_stop]",
+    "level": "caution"
+  },
+  {
+    "ts": "2026-04-04T18:06:55.659171+00:00",
+    "agent": "DKTrench",
+    "symbol": "BXE",
+    "message": "Loss exit -4.1% [stale_3.0hr]",
+    "level": "caution"
+  },
+  {
+    "ts": "2026-04-04T15:56:20.034544+00:00",
+    "agent": "DKTrench",
+    "symbol": "BXE",
+    "message": "Loss exit -12.5% [rapid_dump]",
+    "level": "caution"
+  },
+  {
+    "ts": "2026-04-04T12:06:50.387344+00:00",
+    "agent": "DKTrench",
+    "symbol": "HVE",
+    "message": "Loss exit -12.1% [momentum_stall]",
+    "level": "caution"
+  },
+  {
+    "ts": "2026-04-04T09:52:53.152829+00:00",
+    "agent": "DKTrench",
+    "symbol": "ROOSEVELT",
+    "message": "Loss exit -7.8% [score_collapse_bq0]",
+    "level": "caution"
+  },
+  {
+    "ts": "2026-04-04T09:52:45.837246+00:00",
+    "agent": "DKTrench",
+    "symbol": "BRETT",
+    "message": "Loss exit -6.9% [score_collapse_bq0]",
+    "level": "caution"
+  },
+  {
+    "ts": "2026-04-04T09:51:48.560845+00:00",
+    "agent": "DKTrench",
+    "symbol": "ROOSEVELT",
+    "message": "Loss exit -5.4% [score_collapse_bq0]",
+    "level": "caution"
+  },
+  {
+    "ts": "2026-04-04T09:50:46.752880+00:00",
+    "agent": "DKTrench",
+    "symbol": "PHX",
+    "message": "Loss exit -3.0% [breakeven_protection]",
+    "level": "caution"
+  },
+  {
+    "ts": "2026-04-04T05:42:49.255198+00:00",
+    "agent": "DKTrench",
+    "symbol": "PFT",
+    "message": "Loss exit -26.1% [trailing_stop_27.6%]",
+    "level": "caution"
+  },
+  {
+    "ts": "2026-04-04T00:30:51.579100+00:00",
+    "agent": "DKTrench",
+    "symbol": "JEET",
+    "message": "Loss exit -14.7% [breakeven_protection]",
+    "level": "caution"
+  },
+  {
+    "ts": "2026-04-03T23:16:33.121479+00:00",
+    "agent": "DKTrench",
+    "symbol": "PHX",
+    "message": "Loss exit -16.4% [hard_stop_early]",
+    "level": "caution"
+  },
+  {
+    "ts": "2026-04-03T22:10:41.345617+00:00",
+    "agent": "DKTrench",
+    "symbol": "PHX",
+    "message": "Loss exit -14.7% [hard_stop_early]",
+    "level": "caution"
+  },
+  {
+    "ts": "2026-04-03T22:03:44.767367+00:00",
+    "agent": "DKTrench",
+    "symbol": "JEET",
+    "message": "Loss exit -18.0% [hard_stop_early]",
+    "level": "caution"
+  },
+  {
+    "ts": "2026-04-03T21:21:38.463646+00:00",
+    "agent": "DKTrench",
+    "symbol": "Teddy",
+    "message": "Loss exit -11.6% [hard_stop_early]",
+    "level": "caution"
+  },
+  {
+    "ts": "2026-04-03T19:59:20.009588+00:00",
+    "agent": "DKTrench",
+    "symbol": "Teddy",
+    "message": "Loss exit -12.4% [hard_stop_early]",
+    "level": "caution"
+  },
+  {
+    "ts": "2026-04-03T19:04:52.372287+00:00",
+    "agent": "DKTrench",
+    "symbol": "PORKER",
+    "message": "Loss exit -19.4% [hard_stop_early]",
+    "level": "caution"
+  },
+  {
+    "ts": "2026-04-03T17:29:16.203318+00:00",
+    "agent": "DKTrench",
+    "symbol": "M1N",
+    "message": "Loss exit -4.9% [spread_widening]",
+    "level": "caution"
+  },
+  {
+    "ts": "2026-04-03T17:12:21.822314+00:00",
+    "agent": "DKTrench",
+    "symbol": "PORKER",
+    "message": "Loss exit -7.7% [spread_widening]",
+    "level": "caution"
+  },
+  {
+    "ts": "2026-04-03T16:37:54.587002+00:00",
+    "agent": "DKTrench",
+    "symbol": "NOX",
+    "message": "Loss exit -3.7% [lower_highs]",
+    "level": "caution"
+  },
+  {
+    "ts": "2026-04-03T16:28:07.397316+00:00",
+    "agent": "DKTrench",
+    "symbol": "PORKER",
+    "message": "Loss exit -24.2% [hard_stop_early]",
+    "level": "caution"
+  },
+  {
+    "ts": "2026-04-03T13:51:42.187527+00:00",
+    "agent": "DKTrench",
+    "symbol": "NOX",
+    "message": "Loss exit -35.7% [hard_stop]",
+    "level": "caution"
+  }
+]

@@ -1,0 +1,735 @@
+{
+  "new_tokens": {},
+  "velocity_alerts": {
+    "54454C4554555A5A590000000000000000000000:r3VPc4JJ9cGvYPtCZzqtP2QAa4KZXS8X2W": {
+      "symbol": "TELETUZZY",
+      "currency": "54454C4554555A5A590000000000000000000000",
+      "issuer": "r3VPc4JJ9cGvYPtCZzqtP2QAa4KZXS8X2W",
+      "burst_count": 50,
+      "window_min": 5,
+      "updated_at": 1775516640.9257948
+    },
+    "50524F5048455400000000000000000000000000:rMzpoATg67qNZZtv6P87WCkLUM1YoNvcMf": {
+      "symbol": "PROPHET",
+      "currency": "50524F5048455400000000000000000000000000",
+      "issuer": "rMzpoATg67qNZZtv6P87WCkLUM1YoNvcMf",
+      "burst_count": 45,
+      "window_min": 5,
+      "updated_at": 1775535174.5410728
+    },
+    "USA:rPZtxHnJLZHz3poXsQZKXyt5smyue8Up7U": {
+      "symbol": "USA",
+      "currency": "USA",
+      "issuer": "rPZtxHnJLZHz3poXsQZKXyt5smyue8Up7U",
+      "burst_count": 35,
+      "window_min": 5,
+      "updated_at": 1775514170.2286801
+    },
+    "5052535600000000000000000000000000000000:rBW2GShxKz4PEG7VoYZyTx1aYsng7V1vGz": {
+      "symbol": "PRSV",
+      "currency": "5052535600000000000000000000000000000000",
+      "issuer": "rBW2GShxKz4PEG7VoYZyTx1aYsng7V1vGz",
+      "burst_count": 60,
+      "window_min": 5,
+      "updated_at": 1775517379.3046718
+    },
+    "5433444459000000000000000000000000000000:rathXr3Pia1j5dK97H7ZMKLUQLpRHrQFNR": {
+      "symbol": "T3DDY",
+      "currency": "5433444459000000000000000000000000000000",
+      "issuer": "rathXr3Pia1j5dK97H7ZMKLUQLpRHrQFNR",
+      "burst_count": 15,
+      "window_min": 5,
+      "updated_at": 1775515690.235866
+    },
+    "4252455454000000000000000000000000000000:r9aQij7Hj4XnPVKDcK5zhPGDrAMmi4mqVp": {
+      "symbol": "BRETT",
+      "currency": "4252455454000000000000000000000000000000",
+      "issuer": "r9aQij7Hj4XnPVKDcK5zhPGDrAMmi4mqVp",
+      "burst_count": 10,
+      "window_min": 5,
+      "updated_at": 1775515909.384237
+    },
+    "PHX:rskkPc3Eea3phZmzYqdoRFXeHg1GF7oVzG": {
+      "symbol": "PHX",
+      "currency": "PHX",
+      "issuer": "rskkPc3Eea3phZmzYqdoRFXeHg1GF7oVzG",
+      "burst_count": 20,
+      "window_min": 5,
+      "updated_at": 1775533076.5330057
+    },
+    "6272697A7A6C7900000000000000000000000000:rEq1Xd7jAFZR4bThPBqnPFRFGFTiefDPKQ": {
+      "symbol": "brizzly",
+      "currency": "6272697A7A6C7900000000000000000000000000",
+      "issuer": "rEq1Xd7jAFZR4bThPBqnPFRFGFTiefDPKQ",
+      "burst_count": 40,
+      "window_min": 5,
+      "updated_at": 1775540281.791718
+    },
+    "595A5A5546000000000000000000000000000000:rhghg7z4C2sXVG7Z4KZTdcrQ77LWPFgPm1": {
+      "symbol": "YZZUF",
+      "currency": "595A5A5546000000000000000000000000000000",
+      "issuer": "rhghg7z4C2sXVG7Z4KZTdcrQ77LWPFgPm1",
+      "burst_count": 20,
+      "window_min": 5,
+      "updated_at": 1775516464.2922053
+    },
+    "414C42494E4F0000000000000000000000000000:rLKuagQt8AT3ZSkG62gh8nmN8cFR9Yvfrz": {
+      "symbol": "ALBINO",
+      "currency": "414C42494E4F0000000000000000000000000000",
+      "issuer": "rLKuagQt8AT3ZSkG62gh8nmN8cFR9Yvfrz",
+      "burst_count": 40,
+      "window_min": 5,
+      "updated_at": 1775522419.3606281
+    },
+    "444B4C4544474552000000000000000000000000:rfoVSNzPTrVHL3Ge5ywXRFemHUnsD8VKko": {
+      "symbol": "DKLEDGER",
+      "currency": "444B4C4544474552000000000000000000000000",
+      "issuer": "rfoVSNzPTrVHL3Ge5ywXRFemHUnsD8VKko",
+      "burst_count": 35,
+      "window_min": 5,
+      "updated_at": 1775538956.6239753
+    },
+    "333231797567656C626172616562000000000000:rPTeGeuv3RJykyj9Kb96NgnJUyG7PU25wY": {
+      "symbol": "321yugelbaraeb",
+      "currency": "333231797567656C626172616562000000000000",
+      "issuer": "rPTeGeuv3RJykyj9Kb96NgnJUyG7PU25wY",
+      "burst_count": 45,
+      "window_min": 5,
+      "updated_at": 1775523631.546016
+    },
+    "5465646479000000000000000000000000000000:r9Qk4VGodriw2xKLG9sRbTXWgknkz9TkDd": {
+      "symbol": "Teddy",
+      "currency": "5465646479000000000000000000000000000000",
+      "issuer": "r9Qk4VGodriw2xKLG9sRbTXWgknkz9TkDd",
+      "burst_count": 15,
+      "window_min": 5,
+      "updated_at": 1775524201.121939
+    },
+    "50484E4958000000000000000000000000000000:rDFXbW2ZZCG5WgPtqwNiA2xZokLMm9ivmN": {
+      "symbol": "PHNIX",
+      "currency": "50484E4958000000000000000000000000000000",
+      "issuer": "rDFXbW2ZZCG5WgPtqwNiA2xZokLMm9ivmN",
+      "burst_count": 10,
+      "window_min": 5,
+      "updated_at": 1775524193.4046636
+    },
+    "5241564500000000000000000000000000000000:rHnJUxA3zFoEWSmasbMNw1g3qWh8CcCkAM": {
+      "symbol": "RAVE",
+      "currency": "5241564500000000000000000000000000000000",
+      "issuer": "rHnJUxA3zFoEWSmasbMNw1g3qWh8CcCkAM",
+      "burst_count": 60,
+      "window_min": 5,
+      "updated_at": 1775525533.4553745
+    },
+    "5A45525053000000000000000000000000000000:rJztCAZEQvKcMSQTpKUZRJJjA11aUTk9Aw": {
+      "symbol": "ZERPS",
+      "currency": "5A45525053000000000000000000000000000000",
+      "issuer": "rJztCAZEQvKcMSQTpKUZRJJjA11aUTk9Aw",
+      "burst_count": 20,
+      "window_min": 5,
+      "updated_at": 1775541715.4205725
+    },
+    "53657270656E7400000000000000000000000000:rRd4PRLPtvYT3KsVdfZBccLpS3Mk8Vo7E": {
+      "symbol": "Serpent",
+      "currency": "53657270656E7400000000000000000000000000",
+      "issuer": "rRd4PRLPtvYT3KsVdfZBccLpS3Mk8Vo7E",
+      "burst_count": 25,
+      "window_min": 5,
+      "updated_at": 1775538394.6365874
+    },
+    "4D4F555345000000000000000000000000000000:rJevHGVUzAUPSGxiECgqcNVNVjRkTBWD7T": {
+      "symbol": "MOUSE",
+      "currency": "4D4F555345000000000000000000000000000000",
+      "issuer": "rJevHGVUzAUPSGxiECgqcNVNVjRkTBWD7T",
+      "burst_count": 15,
+      "window_min": 5,
+      "updated_at": 1775526650.4902
+    },
+    "5265646479000000000000000000000000000000:rw5Kdcm1vW4xVefFafjMbevs5SL9fYP36U": {
+      "symbol": "Reddy",
+      "currency": "5265646479000000000000000000000000000000",
+      "issuer": "rw5Kdcm1vW4xVefFafjMbevs5SL9fYP36U",
+      "burst_count": 15,
+      "window_min": 5,
+      "updated_at": 1775526650.4920118
+    },
+    "5055505045540000000000000000000000000000:rJfQFeHTZcnRsY4Ba5sJVKUhLs48E9apBn": {
+      "symbol": "PUPPET",
+      "currency": "5055505045540000000000000000000000000000",
+      "issuer": "rJfQFeHTZcnRsY4Ba5sJVKUhLs48E9apBn",
+      "burst_count": 15,
+      "window_min": 5,
+      "updated_at": 1775526654.2458677
+    },
+    "585250424E4B0000000000000000000000000000:rfQ4EooGNoaJBHdCLu7RoCHZXUiUYuHXRJ": {
+      "symbol": "XRPBNK",
+      "currency": "585250424E4B0000000000000000000000000000",
+      "issuer": "rfQ4EooGNoaJBHdCLu7RoCHZXUiUYuHXRJ",
+      "burst_count": 20,
+      "window_min": 5,
+      "updated_at": 1775526627.2245183
+    },
+    "46454C4958000000000000000000000000000000:rsCCLpiq87xAsXEAmmmpzBiDPGJHmTiHq7": {
+      "symbol": "FELIX",
+      "currency": "46454C4958000000000000000000000000000000",
+      "issuer": "rsCCLpiq87xAsXEAmmmpzBiDPGJHmTiHq7",
+      "burst_count": 15,
+      "window_min": 5,
+      "updated_at": 1775526795.8377907
+    },
+    "524C494452000000000000000000000000000000:rPQvGvGzgmy6FboCbS4PjxvxFb4sLDHGuF": {
+      "symbol": "RLIDR",
+      "currency": "524C494452000000000000000000000000000000",
+      "issuer": "rPQvGvGzgmy6FboCbS4PjxvxFb4sLDHGuF",
+      "burst_count": 10,
+      "window_min": 5,
+      "updated_at": 1775526865.9352088
+    },
+    "524C555344000000000000000000000000000000:rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De": {
+      "symbol": "RLUSD",
+      "currency": "524C555344000000000000000000000000000000",
+      "issuer": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De",
+      "burst_count": 35,
+      "window_min": 5,
+      "updated_at": 1775527691.1532373
+    },
+    "4C41574153000000000000000000000000000000:rfAWYnEAkQGAhbESWAMdNccWJvdcrgugMC": {
+      "symbol": "LAWAS",
+      "currency": "4C41574153000000000000000000000000000000",
+      "issuer": "rfAWYnEAkQGAhbESWAMdNccWJvdcrgugMC",
+      "burst_count": 10,
+      "window_min": 5,
+      "updated_at": 1775526869.8425856
+    },
+    "58525052494E5445520000000000000000000000:rUN75rMAJRg7NT4E79VZSrqLyjCUAyfG84": {
+      "symbol": "XRPRINTER",
+      "currency": "58525052494E5445520000000000000000000000",
+      "issuer": "rUN75rMAJRg7NT4E79VZSrqLyjCUAyfG84",
+      "burst_count": 35,
+      "window_min": 5,
+      "updated_at": 1775536773.1287992
+    },
+    "524156454E000000000000000000000000000000:ra3HRoGnazzmWn11fpXpP2XWqbuwqidDjD": {
+      "symbol": "RAVEN",
+      "currency": "524156454E000000000000000000000000000000",
+      "issuer": "ra3HRoGnazzmWn11fpXpP2XWqbuwqidDjD",
+      "burst_count": 10,
+      "window_min": 5,
+      "updated_at": 1775527429.524144
+    },
+    "5844455854455200000000000000000000000000:rLAwvEbNMYP9Dx3CoLUMJcQzCninV5dppD": {
+      "symbol": "XDEXTER",
+      "currency": "5844455854455200000000000000000000000000",
+      "issuer": "rLAwvEbNMYP9Dx3CoLUMJcQzCninV5dppD",
+      "burst_count": 30,
+      "window_min": 5,
+      "updated_at": 1775527519.3138018
+    },
+    "474F444641544845520000000000000000000000:rsMnAckUkZuV6bxtUPXopDJcsW3DQMGEHy": {
+      "symbol": "GODFATHER",
+      "currency": "474F444641544845520000000000000000000000",
+      "issuer": "rsMnAckUkZuV6bxtUPXopDJcsW3DQMGEHy",
+      "burst_count": 10,
+      "window_min": 5,
+      "updated_at": 1775527449.286557
+    },
+    "524F42494E000000000000000000000000000000:rDRGHABJHtiN2MteCde9GLtiq6yBi36Lwq": {
+      "symbol": "ROBIN",
+      "currency": "524F42494E000000000000000000000000000000",
+      "issuer": "rDRGHABJHtiN2MteCde9GLtiq6yBi36Lwq",
+      "burst_count": 15,
+      "window_min": 5,
+      "updated_at": 1775537261.5945566
+    },
+    "50414E544552414341504954414C000000000000:rnc2d4XAqJbdNaqqN3NiUdKnZjvoHaydBC": {
+      "symbol": "PANTERACAPITAL",
+      "currency": "50414E544552414341504954414C000000000000",
+      "issuer": "rnc2d4XAqJbdNaqqN3NiUdKnZjvoHaydBC",
+      "burst_count": 10,
+      "window_min": 5,
+      "updated_at": 1775529259.2573586
+    },
+    "53454E5400000000000000000000000000000000:rspYcqzdPTjaUPmWg9i1vK5LJLSyfJUpH4": {
+      "symbol": "SENT",
+      "currency": "53454E5400000000000000000000000000000000",
+      "issuer": "rspYcqzdPTjaUPmWg9i1vK5LJLSyfJUpH4",
+      "burst_count": 10,
+      "window_min": 5,
+      "updated_at": 1775529485.4067273
+    },
+    "5255475241545300000000000000000000000000:r3owcAEjUpT7eJsr99FRXDaRq9EUkM4jUF": {
+      "symbol": "RUGRATS",
+      "currency": "5255475241545300000000000000000000000000",
+      "issuer": "r3owcAEjUpT7eJsr99FRXDaRq9EUkM4jUF",
+      "burst_count": 10,
+      "window_min": 5,
+      "updated_at": 1775530239.0316422
+    },
+    "5354494D50590000000000000000000000000000:r4MczP3UQ4i7qbXx5r4cq9N36w4pyaPpqL": {
+      "symbol": "STIMPY",
+      "currency": "5354494D50590000000000000000000000000000",
+      "issuer": "r4MczP3UQ4i7qbXx5r4cq9N36w4pyaPpqL",
+      "burst_count": 10,
+      "window_min": 5,
+      "updated_at": 1775530520.3287976
+    },
+    "504F4C4943450000000000000000000000000000:rfjutsDJfakrhZUPMBe5E65S38eRZEP3yt": {
+      "symbol": "POLICE",
+      "currency": "504F4C4943450000000000000000000000000000",
+      "issuer": "rfjutsDJfakrhZUPMBe5E65S38eRZEP3yt",
+      "burst_count": 10,
+      "window_min": 5,
+      "updated_at": 1775530544.0162573
+    },
+    "5852504858000000000000000000000000000000:rKcj7mdNwijbG6NfzJBLcgJZBaix6tQVdJ": {
+      "symbol": "XRPHX",
+      "currency": "5852504858000000000000000000000000000000",
+      "issuer": "rKcj7mdNwijbG6NfzJBLcgJZBaix6tQVdJ",
+      "burst_count": 30,
+      "window_min": 5,
+      "updated_at": 1775530966.787857
+    },
+    "XPA:rhaDbxp66kx3d4BxZmXt3Ukdy1dvmceezT": {
+      "symbol": "XPA",
+      "currency": "XPA",
+      "issuer": "rhaDbxp66kx3d4BxZmXt3Ukdy1dvmceezT",
+      "burst_count": 10,
+      "window_min": 5,
+      "updated_at": 1775531086.0292408
+    },
+    "5553444300000000000000000000000000000000:rGm7WCVp9gb4jZHWTEtGUr4dd74z2XuWhE": {
+      "symbol": "USDC",
+      "currency": "5553444300000000000000000000000000000000",
+      "issuer": "rGm7WCVp9gb4jZHWTEtGUr4dd74z2XuWhE",
+      "burst_count": 65,
+      "window_min": 5,
+      "updated_at": 1775534550.0423026
+    },
+    "7848657800000000000000000000000000000000:rBHKnPuXzkf6WgE3sZYv1K7gPRDsX1rYjs": {
+      "symbol": "xHex",
+      "currency": "7848657800000000000000000000000000000000",
+      "issuer": "rBHKnPuXzkf6WgE3sZYv1K7gPRDsX1rYjs",
+      "burst_count": 25,
+      "window_min": 5,
+      "updated_at": 1775532804.9384143
+    },
+    "5653574300000000000000000000000000000000:rsMoz15qKu9kzqDzTKCGhgnrqHdGygKoM9": {
+      "symbol": "VSWC",
+      "currency": "5653574300000000000000000000000000000000",
+      "issuer": "rsMoz15qKu9kzqDzTKCGhgnrqHdGygKoM9",
+      "burst_count": 130,
+      "window_min": 5,
+      "updated_at": 1775533851.76742
+    },
+    "50484E4958353839000000000000000000000000:rfahEGcrLsRJM8a2yqaR1cwSXQoMc5QpCm": {
+      "symbol": "PHNIX589",
+      "currency": "50484E4958353839000000000000000000000000",
+      "issuer": "rfahEGcrLsRJM8a2yqaR1cwSXQoMc5QpCm",
+      "burst_count": 35,
+      "window_min": 5,
+      "updated_at": 1775533193.1435742
+    },
+    "4C41525000000000000000000000000000000000:rKc4isQXfHaDZhSajrHXQM4UMtvRah7JxA": {
+      "symbol": "LARP",
+      "currency": "4C41525000000000000000000000000000000000",
+      "issuer": "rKc4isQXfHaDZhSajrHXQM4UMtvRah7JxA",
+      "burst_count": 15,
+      "window_min": 5,
+      "updated_at": 1775534449.3568912
+    },
+    "4163000000000000000000000000000000000000:rGa7xndwH84jhtY97EnEf8mLzR8W3fZjwG": {
+      "symbol": "Ac",
+      "currency": "4163000000000000000000000000000000000000",
+      "issuer": "rGa7xndwH84jhtY97EnEf8mLzR8W3fZjwG",
+      "burst_count": 95,
+      "window_min": 5,
+      "updated_at": 1775534406.6560752
+    },
+    "USD:rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B": {
+      "symbol": "USD",
+      "currency": "USD",
+      "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+      "burst_count": 55,
+      "window_min": 5,
+      "updated_at": 1775536626.7134066
+    },
+    "5553444300000000000000000000000000000000:rcEGREd8NmkKRE8GE424sksyt1tJVFZwu": {
+      "symbol": "USDC",
+      "currency": "5553444300000000000000000000000000000000",
+      "issuer": "rcEGREd8NmkKRE8GE424sksyt1tJVFZwu",
+      "burst_count": 50,
+      "window_min": 5,
+      "updated_at": 1775534565.4553585
+    },
+    "5852507300000000000000000000000000000000:rf6DJzZ18fZijpqQV1bRAXGPoPrMvWoyui": {
+      "symbol": "XRPs",
+      "currency": "5852507300000000000000000000000000000000",
+      "issuer": "rf6DJzZ18fZijpqQV1bRAXGPoPrMvWoyui",
+      "burst_count": 10,
+      "window_min": 5,
+      "updated_at": 1775536282.046866
+    },
+    "4250485800000000000000000000000000000000:rNf9TB7mRK3Lc1TeohnwjmAb2ZA17Mi5BV": {
+      "symbol": "BPHX",
+      "currency": "4250485800000000000000000000000000000000",
+      "issuer": "rNf9TB7mRK3Lc1TeohnwjmAb2ZA17Mi5BV",
+      "burst_count": 10,
+      "window_min": 5,
+      "updated_at": 1775537374.257249
+    },
+    "416D657269636146697273740000000000000000:r4GD2HMVKJWhfzvgHcUL6frneuUACAzqwo": {
+      "symbol": "AmericaFirst",
+      "currency": "416D657269636146697273740000000000000000",
+      "issuer": "r4GD2HMVKJWhfzvgHcUL6frneuUACAzqwo",
+      "burst_count": 10,
+      "window_min": 5,
+      "updated_at": 1775537614.829469
+    },
+    "434F524E00000000000000000000000000000000:rBTjqSwQnbjCgFtHSjzDHRVArTdrmxpesK": {
+      "symbol": "CORN",
+      "currency": "434F524E00000000000000000000000000000000",
+      "issuer": "rBTjqSwQnbjCgFtHSjzDHRVArTdrmxpesK",
+      "burst_count": 20,
+      "window_min": 5,
+      "updated_at": 1775538246.2635903
+    },
+    "USD:rKiCet8SdvWxPXnAgYarFUXMh1zCPz432Y": {
+      "symbol": "USD",
+      "currency": "USD",
+      "issuer": "rKiCet8SdvWxPXnAgYarFUXMh1zCPz432Y",
+      "burst_count": 10,
+      "window_min": 5,
+      "updated_at": 1775538191.9523776
+    },
+    "4242444E00000000000000000000000000000000:rhMLy2rzPdKKVFineT9j6WhnikHQvgvjKo": {
+      "symbol": "BBDN",
+      "currency": "4242444E00000000000000000000000000000000",
+      "issuer": "rhMLy2rzPdKKVFineT9j6WhnikHQvgvjKo",
+      "burst_count": 10,
+      "window_min": 5,
+      "updated_at": 1775539193.511201
+    },
+    "44524F5000000000000000000000000000000000:rszenFJoDdiGjyezQc8pME9KWDQH43Tswh": {
+      "symbol": "DROP",
+      "currency": "44524F5000000000000000000000000000000000",
+      "issuer": "rszenFJoDdiGjyezQc8pME9KWDQH43Tswh",
+      "burst_count": 10,
+      "window_min": 5,
+      "updated_at": 1775539893.3078094
+    },
+    "5852504400000000000000000000000000000000:rDjwJpV886aWZxpZE73yNH4BHhGYCwnEVQ": {
+      "symbol": "XRPD",
+      "currency": "5852504400000000000000000000000000000000",
+      "issuer": "rDjwJpV886aWZxpZE73yNH4BHhGYCwnEVQ",
+      "burst_count": 25,
+      "window_min": 5,
+      "updated_at": 1775540712.13961
+    },
+    "41524D5900000000000000000000000000000000:rGG3wQ4kUzd7Jnmk1n5NWPZjjut62kCBfC": {
+      "symbol": "ARMY",
+      "currency": "41524D5900000000000000000000000000000000",
+      "issuer": "rGG3wQ4kUzd7Jnmk1n5NWPZjjut62kCBfC",
+      "burst_count": 10,
+      "window_min": 5,
+      "updated_at": 1775541914.9992359
+    },
+    "5452494747455200000000000000000000000000:rwhcSqW68DgpVHn4tUxdNrN3mP8b29Rnuk": {
+      "symbol": "TRIGGER",
+      "currency": "5452494747455200000000000000000000000000",
+      "issuer": "rwhcSqW68DgpVHn4tUxdNrN3mP8b29Rnuk",
+      "burst_count": 30,
+      "window_min": 5,
+      "updated_at": 1775542221.5360281
+    },
+    "547269466F726365000000000000000000000000:rGeevxdLguXxvh7RmUmMEXr7DSRNTXPRpX": {
+      "symbol": "TriForce",
+      "currency": "547269466F726365000000000000000000000000",
+      "issuer": "rGeevxdLguXxvh7RmUmMEXr7DSRNTXPRpX",
+      "burst_count": 10,
+      "window_min": 5,
+      "updated_at": 1775542229.3873315
+    },
+    "57494E4400000000000000000000000000000000:rnh3kiVFSBJxhwa7RJmmafQrqhyn9SKyCj": {
+      "symbol": "WIND",
+      "currency": "57494E4400000000000000000000000000000000",
+      "issuer": "rnh3kiVFSBJxhwa7RJmmafQrqhyn9SKyCj",
+      "burst_count": 10,
+      "window_min": 5,
+      "updated_at": 1775543349.0289035
+    },
+    "4C554E4300000000000000000000000000000000:rP3ZezeLjMJgwQvXSY6pWjSSDYkzNcFiL": {
+      "symbol": "LUNC",
+      "currency": "4C554E4300000000000000000000000000000000",
+      "issuer": "rP3ZezeLjMJgwQvXSY6pWjSSDYkzNcFiL",
+      "burst_count": 10,
+      "window_min": 5,
+      "updated_at": 1775543472.3999498
+    },
+    "4172776561766500000000000000000000000000:rLERkHFnuQt61Ak5ZGD1mWbG9Li87QUg47": {
+      "symbol": "Arweave",
+      "currency": "4172776561766500000000000000000000000000",
+      "issuer": "rLERkHFnuQt61Ak5ZGD1mWbG9Li87QUg47",
+      "burst_count": 10,
+      "window_min": 5,
+      "updated_at": 1775543557.5256035
+    },
+    "5343414D454D0000000000000000000000000000:rJZAhzmoZEDDPNjMxxAWmsc2nJZJsCrpRY": {
+      "symbol": "SCAMEM",
+      "currency": "5343414D454D0000000000000000000000000000",
+      "issuer": "rJZAhzmoZEDDPNjMxxAWmsc2nJZJsCrpRY",
+      "burst_count": 10,
+      "window_min": 5,
+      "updated_at": 1775543634.5313513
+    }
+  },
+  "last_updated": 1775543634.5313513,
+  "momentum_alerts": {
+    "524C555344000000000000000000000000000000:rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De": {
+      "symbol": "RLUSD",
+      "currency": "524C555344000000000000000000000000000000",
+      "issuer": "rMxCKbEDwqr76QuheSUMdEGf4B9xJ8m5De",
+      "offer_count": 570,
+      "total_xrp": 13195407.28,
+      "window_sec": 120,
+      "updated_at": 1775525243.2544665
+    },
+    "CNY:rKiCet8SdvWxPXnAgYarFUXMh1zCPz432Y": {
+      "symbol": "CNY",
+      "currency": "CNY",
+      "issuer": "rKiCet8SdvWxPXnAgYarFUXMh1zCPz432Y",
+      "offer_count": 15,
+      "total_xrp": 1500000.0,
+      "window_sec": 120,
+      "updated_at": 1775525235.1358995
+    },
+    "5553444300000000000000000000000000000000:rGm7WCVp9gb4jZHWTEtGUr4dd74z2XuWhE": {
+      "symbol": "USDC",
+      "currency": "5553444300000000000000000000000000000000",
+      "issuer": "rGm7WCVp9gb4jZHWTEtGUr4dd74z2XuWhE",
+      "offer_count": 21,
+      "total_xrp": 13113486.91,
+      "window_sec": 120,
+      "updated_at": 1775525239.0076041
+    },
+    "USD:rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B": {
+      "symbol": "USD",
+      "currency": "USD",
+      "issuer": "rvYAfWj5gh67oV6fW32ZzP3Aw4Eubs59B",
+      "offer_count": 12,
+      "total_xrp": 12000000.0,
+      "window_sec": 120,
+      "updated_at": 1775525235.0932782
+    },
+    "USD:rhub8VRN55s94qWKDv6jmDy1pUykJzF3wq": {
+      "symbol": "USD",
+      "currency": "USD",
+      "issuer": "rhub8VRN55s94qWKDv6jmDy1pUykJzF3wq",
+      "offer_count": 12,
+      "total_xrp": 12000000.0,
+      "window_sec": 120,
+      "updated_at": 1775525235.0977955
+    },
+    "USD:rKiCet8SdvWxPXnAgYarFUXMh1zCPz432Y": {
+      "symbol": "USD",
+      "currency": "USD",
+      "issuer": "rKiCet8SdvWxPXnAgYarFUXMh1zCPz432Y",
+      "offer_count": 12,
+      "total_xrp": 12000000.0,
+      "window_sec": 120,
+      "updated_at": 1775525235.1005347
+    },
+    "5553444300000000000000000000000000000000:rcEGREd8NmkKRE8GE424sksyt1tJVFZwu": {
+      "symbol": "USDC",
+      "currency": "5553444300000000000000000000000000000000",
+      "issuer": "rcEGREd8NmkKRE8GE424sksyt1tJVFZwu",
+      "offer_count": 12,
+      "total_xrp": 12000000.0,
+      "window_sec": 120,
+      "updated_at": 1775525235.1031272
+    },
+    "5553445400000000000000000000000000000000:rcvxE9PS9YBwxtGg1qNeewV6ZB3wGubZq": {
+      "symbol": "USDT",
+      "currency": "5553445400000000000000000000000000000000",
+      "issuer": "rcvxE9PS9YBwxtGg1qNeewV6ZB3wGubZq",
+      "offer_count": 12,
+      "total_xrp": 12000000.0,
+      "window_sec": 120,
+      "updated_at": 1775525235.1059525
+    },
+    "SGB:rctArjqVvTHihekzDeecKo6mkTYTUSBNc": {
+      "symbol": "SGB",
+      "currency": "SGB",
+      "issuer": "rctArjqVvTHihekzDeecKo6mkTYTUSBNc",
+      "offer_count": 9,
+      "total_xrp": 171.58,
+      "window_sec": 120,
+      "updated_at": 1775525243.246182
+    },
+    "BCH:rcyS4CeCZVYvTiKcxj6Sx32ibKwcDHLds": {
+      "symbol": "BCH",
+      "currency": "BCH",
+      "issuer": "rcyS4CeCZVYvTiKcxj6Sx32ibKwcDHLds",
+      "offer_count": 27,
+      "total_xrp": 58859.27,
+      "window_sec": 120,
+      "updated_at": 1775541765.54427
+    },
+    "47414C4100000000000000000000000000000000:rf5YPb9y9P3fTjhxNaZqmrwaj5ar8PG1gM": {
+      "symbol": "GALA",
+      "currency": "47414C4100000000000000000000000000000000",
+      "issuer": "rf5YPb9y9P3fTjhxNaZqmrwaj5ar8PG1gM",
+      "offer_count": 21,
+      "total_xrp": 1137.5,
+      "window_sec": 120,
+      "updated_at": 1775528962.1367452
+    },
+    "DSH:rcXY84C4g14iFp6taFXjjQGVeHqSCh9RX": {
+      "symbol": "DSH",
+      "currency": "DSH",
+      "issuer": "rcXY84C4g14iFp6taFXjjQGVeHqSCh9RX",
+      "offer_count": 12,
+      "total_xrp": 24817.91,
+      "window_sec": 120,
+      "updated_at": 1775526194.0510492
+    },
+    "4555524F50000000000000000000000000000000:rMkEuRii9w9uBMQDnWV5AA43gvYZR9JxVK": {
+      "symbol": "EUROP",
+      "currency": "4555524F50000000000000000000000000000000",
+      "issuer": "rMkEuRii9w9uBMQDnWV5AA43gvYZR9JxVK",
+      "offer_count": 9,
+      "total_xrp": 60776.59,
+      "window_sec": 120,
+      "updated_at": 1775525930.6546779
+    },
+    "XHO:r9rCp6XCn3WiHWjMUs7c1GBZ85VsCFX4Ur": {
+      "symbol": "XHO",
+      "currency": "XHO",
+      "issuer": "r9rCp6XCn3WiHWjMUs7c1GBZ85VsCFX4Ur",
+      "offer_count": 6,
+      "total_xrp": 10.28,
+      "window_sec": 120,
+      "updated_at": 1775526146.6468904
+    },
+    "CTF:r9Xzi4KsSF1Xtr8WHyBmUcvfP9FzTyG5wp": {
+      "symbol": "CTF",
+      "currency": "CTF",
+      "issuer": "r9Xzi4KsSF1Xtr8WHyBmUcvfP9FzTyG5wp",
+      "offer_count": 6,
+      "total_xrp": 150.0,
+      "window_sec": 120,
+      "updated_at": 1775526505.8206863
+    },
+    "5045504500000000000000000000000000000000:rfY6rBycwpcyt49TGFvaVAoib3qmcWJERC": {
+      "symbol": "PEPE",
+      "currency": "5045504500000000000000000000000000000000",
+      "issuer": "rfY6rBycwpcyt49TGFvaVAoib3qmcWJERC",
+      "offer_count": 12,
+      "total_xrp": 389.07,
+      "window_sec": 120,
+      "updated_at": 1775526599.9200199
+    },
+    "5348494200000000000000000000000000000000:rfY6rBycwpcyt49TGFvaVAoib3qmcWJERC": {
+      "symbol": "SHIB",
+      "currency": "5348494200000000000000000000000000000000",
+      "issuer": "rfY6rBycwpcyt49TGFvaVAoib3qmcWJERC",
+      "offer_count": 6,
+      "total_xrp": 203.96,
+      "window_sec": 120,
+      "updated_at": 1775526533.3509326
+    },
+    "UNI:rfY6rBycwpcyt49TGFvaVAoib3qmcWJERC": {
+      "symbol": "UNI",
+      "currency": "UNI",
+      "issuer": "rfY6rBycwpcyt49TGFvaVAoib3qmcWJERC",
+      "offer_count": 6,
+      "total_xrp": 217.64,
+      "window_sec": 120,
+      "updated_at": 1775526846.4139822
+    },
+    "4F70756C656E6365000000000000000000000000:rs5wxrBTSErywDDfPs5NY4Zorrca5QMGVd": {
+      "symbol": "Opulence",
+      "currency": "4F70756C656E6365000000000000000000000000",
+      "issuer": "rs5wxrBTSErywDDfPs5NY4Zorrca5QMGVd",
+      "offer_count": 9,
+      "total_xrp": 38.98,
+      "window_sec": 120,
+      "updated_at": 1775533498.6049469
+    },
+    "5052535600000000000000000000000000000000:rBW2GShxKz4PEG7VoYZyTx1aYsng7V1vGz": {
+      "symbol": "PRSV",
+      "currency": "5052535600000000000000000000000000000000",
+      "issuer": "rBW2GShxKz4PEG7VoYZyTx1aYsng7V1vGz",
+      "offer_count": 9,
+      "total_xrp": 119.27,
+      "window_sec": 120,
+      "updated_at": 1775535062.0334842
+    },
+    "5343485745504500000000000000000000000000:rUQXurByxmKni4aLpuWMYMxxV5GWT1Azw2": {
+      "symbol": "SCHWEPE",
+      "currency": "5343485745504500000000000000000000000000",
+      "issuer": "rUQXurByxmKni4aLpuWMYMxxV5GWT1Azw2",
+      "offer_count": 15,
+      "total_xrp": 63.1,
+      "window_sec": 120,
+      "updated_at": 1775541261.1855981
+    }
+  },
+  "clob_launches": {
+    "4163000000000000000000000000000000000000:rGa7xndwH84jhtY97EnEf8mLzR8W3fZjwG": {
+      "symbol": "Ac",
+      "currency": "4163000000000000000000000000000000000000",
+      "issuer": "rGa7xndwH84jhtY97EnEf8mLzR8W3fZjwG",
+      "signal_type": "clob_momentum",
+      "updated_at": 1775534870.9902978,
+      "vol_5min_xrp": 32.27,
+      "buy_count": 6,
+      "ts_burst": 2,
+      "clob_price": 0.0009120450271539874,
+      "price_chg_pct": 126.9,
+      "baseline_price": 0.000402022384749116,
+      "entry_trigger": true
+    },
+    "5052535600000000000000000000000000000000:rBW2GShxKz4PEG7VoYZyTx1aYsng7V1vGz": {
+      "symbol": "PRSV",
+      "currency": "5052535600000000000000000000000000000000",
+      "issuer": "rBW2GShxKz4PEG7VoYZyTx1aYsng7V1vGz",
+      "signal_type": "clob_momentum",
+      "updated_at": 1775538320.737125,
+      "vol_5min_xrp": 71.72,
+      "buy_count": 7,
+      "ts_burst": 22,
+      "clob_price": 7.70000110231564e-06,
+      "price_chg_pct": 21.6,
+      "baseline_price": 6.332869478494996e-06,
+      "entry_trigger": true
+    },
+    "50524F5048455400000000000000000000000000:rMzpoATg67qNZZtv6P87WCkLUM1YoNvcMf": {
+      "symbol": "PROPHET",
+      "currency": "50524F5048455400000000000000000000000000",
+      "issuer": "rMzpoATg67qNZZtv6P87WCkLUM1YoNvcMf",
+      "signal_type": "clob_momentum",
+      "updated_at": 1775535007.5919476,
+      "vol_5min_xrp": 38.17,
+      "buy_count": 2,
+      "ts_burst": 27,
+      "clob_price": 0.0045313034081061205,
+      "price_chg_pct": 27.5,
+      "baseline_price": 0.003554854672125097,
+      "entry_trigger": true
+    },
+    "444B4C4544474552000000000000000000000000:rfoVSNzPTrVHL3Ge5ywXRFemHUnsD8VKko": {
+      "symbol": "DKLEDGER",
+      "currency": "444B4C4544474552000000000000000000000000",
+      "issuer": "rfoVSNzPTrVHL3Ge5ywXRFemHUnsD8VKko",
+      "signal_type": "clob_momentum",
+      "updated_at": 1775539516.0535698,
+      "vol_5min_xrp": 76.34,
+      "buy_count": 4,
+      "ts_burst": 21,
+      "clob_price": 3.79999997585248e-06,
+      "price_chg_pct": 183.7,
+      "baseline_price": 1.3395811601373596e-06,
+      "entry_trigger": true
+    }
+  }
+}

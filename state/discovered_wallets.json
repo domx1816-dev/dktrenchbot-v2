@@ -1,0 +1,235 @@
+{
+  "candidates": {
+    "raRBY29mxKf8oADemdUg5618xL6m5RhMLP": {
+      "appearances": 9,
+      "tokens": [
+        "YZZUF"
+      ],
+      "total_score": 500.3478044986725,
+      "last_seen": 1775543411.5114398,
+      "first_seen": 1775535827.8878813,
+      "win_details": [
+        {
+          "symbol": "YZZUF",
+          "pnl_xrp": 1.23880444,
+          "exit_reason": "trailing_stop_21.0%",
+          "our_entry": 1775488714.9130075,
+          "their_offset": 216.08699250221252
+        },
+        {
+          "symbol": "YZZUF",
+          "pnl_xrp": 1.23880444,
+          "exit_reason": "trailing_stop_21.0%",
+          "our_entry": 1775488714.9130075,
+          "their_offset": 216.08699250221252
+        },
+        {
+          "symbol": "YZZUF",
+          "pnl_xrp": 1.23880444,
+          "exit_reason": "trailing_stop_21.0%",
+          "our_entry": 1775488714.9130075,
+          "their_offset": 216.08699250221252
+        },
+        {
+          "symbol": "YZZUF",
+          "pnl_xrp": 1.23880444,
+          "exit_reason": "trailing_stop_21.0%",
+          "our_entry": 1775488714.9130075,
+          "their_offset": 216.08699250221252
+        },
+        {
+          "symbol": "YZZUF",
+          "pnl_xrp": 1.23880444,
+          "exit_reason": "trailing_stop_21.0%",
+          "our_entry": 1775488714.9130075,
+          "their_offset": 216.08699250221252
+        },
+        {
+          "symbol": "YZZUF",
+          "pnl_xrp": 1.23880444,
+          "exit_reason": "trailing_stop_21.0%",
+          "our_entry": 1775488714.9130075,
+          "their_offset": 216.08699250221252
+        },
+        {
+          "symbol": "YZZUF",
+          "pnl_xrp": 1.23880444,
+          "exit_reason": "trailing_stop_21.0%",
+          "our_entry": 1775488714.9130075,
+          "their_offset": 216.08699250221252
+        },
+        {
+          "symbol": "YZZUF",
+          "pnl_xrp": 1.23880444,
+          "exit_reason": "trailing_stop_21.0%",
+          "our_entry": 1775488714.9130075,
+          "their_offset": 216.08699250221252
+        },
+        {
+          "symbol": "YZZUF",
+          "pnl_xrp": 1.23880444,
+          "exit_reason": "trailing_stop_21.0%",
+          "our_entry": 1775488714.9130075,
+          "their_offset": 216.08699250221252
+        }
+      ],
+      "conviction_score": 50.03
+    },
+    "r3QxBXQs2XZ9oMPLsjB2fkFgKTcxC5TRMq": {
+      "appearances": 9,
+      "tokens": [
+        "YZZUF"
+      ],
+      "total_score": 1540.3239022493367,
+      "last_seen": 1775543411.5116653,
+      "first_seen": 1775535827.8883636,
+      "win_details": [
+        {
+          "symbol": "YZZUF",
+          "pnl_xrp": 1.23880444,
+          "exit_reason": "trailing_stop_21.0%",
+          "our_entry": 1775488714.9130075,
+          "their_offset": -583.9130074977875
+        },
+        {
+          "symbol": "YZZUF",
+          "pnl_xrp": 1.23880444,
+          "exit_reason": "trailing_stop_21.0%",
+          "our_entry": 1775488714.9130075,
+          "their_offset": -583.9130074977875
+        },
+        {
+          "symbol": "YZZUF",
+          "pnl_xrp": 1.23880444,
+          "exit_reason": "trailing_stop_21.0%",
+          "our_entry": 1775488714.9130075,
+          "their_offset": -583.9130074977875
+        },
+        {
+          "symbol": "YZZUF",
+          "pnl_xrp": 1.23880444,
+          "exit_reason": "trailing_stop_21.0%",
+          "our_entry": 1775488714.9130075,
+          "their_offset": -583.9130074977875
+        },
+        {
+          "symbol": "YZZUF",
+          "pnl_xrp": 1.23880444,
+          "exit_reason": "trailing_stop_21.0%",
+          "our_entry": 1775488714.9130075,
+          "their_offset": -583.9130074977875
+        },
+        {
+          "symbol": "YZZUF",
+          "pnl_xrp": 1.23880444,
+          "exit_reason": "trailing_stop_21.0%",
+          "our_entry": 1775488714.9130075,
+          "their_offset": -583.9130074977875
+        },
+        {
+          "symbol": "YZZUF",
+          "pnl_xrp": 1.23880444,
+          "exit_reason": "trailing_stop_21.0%",
+          "our_entry": 1775488714.9130075,
+          "their_offset": -583.9130074977875
+        },
+        {
+          "symbol": "YZZUF",
+          "pnl_xrp": 1.23880444,
+          "exit_reason": "trailing_stop_21.0%",
+          "our_entry": 1775488714.9130075,
+          "their_offset": -583.9130074977875
+        },
+        {
+          "symbol": "YZZUF",
+          "pnl_xrp": 1.23880444,
+          "exit_reason": "trailing_stop_21.0%",
+          "our_entry": 1775488714.9130075,
+          "their_offset": -583.9130074977875
+        }
+      ],
+      "conviction_score": 154.03
+    },
+    "rDU7LXLqE7oCK2m2oby5QxWQNFxcxWyP6e": {
+      "appearances": 9,
+      "tokens": [
+        "YZZUF"
+      ],
+      "total_score": 734.0869511246682,
+      "last_seen": 1775543411.5116968,
+      "first_seen": 1775535827.8884048,
+      "win_details": [
+        {
+          "symbol": "YZZUF",
+          "pnl_xrp": 1.23880444,
+          "exit_reason": "trailing_stop_21.0%",
+          "our_entry": 1775488714.9130075,
+          "their_offset": -93.91300749778748
+        },
+        {
+          "symbol": "YZZUF",
+          "pnl_xrp": 1.23880444,
+          "exit_reason": "trailing_stop_21.0%",
+          "our_entry": 1775488714.9130075,
+          "their_offset": -93.91300749778748
+        },
+        {
+          "symbol": "YZZUF",
+          "pnl_xrp": 1.23880444,
+          "exit_reason": "trailing_stop_21.0%",
+          "our_entry": 1775488714.9130075,
+          "their_offset": -93.91300749778748
+        },
+        {
+          "symbol": "YZZUF",
+          "pnl_xrp": 1.23880444,
+          "exit_reason": "trailing_stop_21.0%",
+          "our_entry": 1775488714.9130075,
+          "their_offset": -93.91300749778748
+        },
+        {
+          "symbol": "YZZUF",
+          "pnl_xrp": 1.23880444,
+          "exit_reason": "trailing_stop_21.0%",
+          "our_entry": 1775488714.9130075,
+          "their_offset": -93.91300749778748
+        },
+        {
+          "symbol": "YZZUF",
+          "pnl_xrp": 1.23880444,
+          "exit_reason": "trailing_stop_21.0%",
+          "our_entry": 1775488714.9130075,
+          "their_offset": -93.91300749778748
+        },
+        {
+          "symbol": "YZZUF",
+          "pnl_xrp": 1.23880444,
+          "exit_reason": "trailing_stop_21.0%",
+          "our_entry": 1775488714.9130075,
+          "their_offset": -93.91300749778748
+        },
+        {
+          "symbol": "YZZUF",
+          "pnl_xrp": 1.23880444,
+          "exit_reason": "trailing_stop_21.0%",
+          "our_entry": 1775488714.9130075,
+          "their_offset": -93.91300749778748
+        },
+        {
+          "symbol": "YZZUF",
+          "pnl_xrp": 1.23880444,
+          "exit_reason": "trailing_stop_21.0%",
+          "our_entry": 1775488714.9130075,
+          "their_offset": -93.91300749778748
+        }
+      ],
+      "conviction_score": 73.41
+    }
+  },
+  "tracked": [
+    "raRBY29mxKf8oADemdUg5618xL6m5RhMLP",
+    "r3QxBXQs2XZ9oMPLsjB2fkFgKTcxC5TRMq",
+    "rDU7LXLqE7oCK2m2oby5QxWQNFxcxWyP6e"
+  ],
+  "last_scan_ledger": 1775543411
+}

@@ -1,0 +1,32 @@
+============================================================
+  DKTrenchBot Daily Report — 2026-04-05 21:41 UTC
+============================================================
+
+── BALANCE ──────────────────────────────────────
+  XRP Balance:      39.5230 XRP
+  Total PnL:        -33.1113 XRP
+
+── PERFORMANCE ──────────────────────────────────
+  Total Trades:     43
+  Wins / Losses:    12 / 26
+  Win Rate:         11.5%
+  Best Trade:       +1275.8%
+  Worst Trade:      -29.3%
+  Consecutive Loss: 0
+
+── REGIME ───────────────────────────────────────
+  Current Regime:   COLD
+
+── TOP TRADES ───────────────────────────────────
+  Best:  M1N +1275.8% (tp3_full)
+  Worst: ROBIN -29.3% (orphan_timeout_1hr)
+
+── CHART STATE PERFORMANCE ──────────────────────
+  pre_breakout         n=11 wr=45% avg=+124.4%
+  orphan               n=22 wr=27% avg=+29.2%
+  continuation         n=11 wr=18% avg=+0.1%
+  expansion            n=1 wr=0% avg=-23.6%
+
+── SYSTEM HEALTH ────────────────────────────────
+  Bot Loop:         OK
+============================================================

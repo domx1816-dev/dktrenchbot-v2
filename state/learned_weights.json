@@ -1,0 +1,52 @@
+{
+  "ts": 1775539539.3218393,
+  "trade_count": 9,
+  "chart_states": {
+    "pre_breakout": {
+      "n": 9,
+      "wr": 0.282,
+      "avg_pnl": -0.5978,
+      "score_adj": -2.8
+    }
+  },
+  "score_bands": {
+    "elite": {
+      "n": 6,
+      "wr": 0.348,
+      "avg_pnl": -0.3223,
+      "size_mult": 0.85
+    }
+  },
+  "exit_reasons": {
+    "stale_exit": {
+      "n": 4,
+      "wr": 0.0,
+      "avg_pnl": -0.9915
+    }
+  },
+  "tvl_buckets": {},
+  "smart_wallet": {
+    "without_smart_wallet": {
+      "n": 9,
+      "wr": 0.282,
+      "avg_pnl": -0.5978
+    }
+  },
+  "regime_bias": {
+    "recent_wr": 0.282,
+    "recent_n": 9,
+    "bias": "cold",
+    "size_mult": 0.8
+  },
+  "score_adjustments": {
+    "pre_breakout": -2.8
+  },
+  "size_multipliers": {
+    "band_elite": 0.85,
+    "streak": 0.8
+  },
+  "insights": [
+    "\u26a0\ufe0f  pre_breakout: 28% WR on 9 trades \u2014 penalty -3",
+    "\u2744\ufe0f  Cold streak: 28% WR last 9 \u2014 sizing down 0.8x"
+  ]
+}

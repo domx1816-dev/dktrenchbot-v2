@@ -1,0 +1,16 @@
+{
+  "regime": "neutral",
+  "ts": 1775543684.7680812,
+  "details": {
+    "win_rate": 0.2,
+    "consecutive_losses": 0,
+    "total_trades": 10,
+    "candidates_above_70": 10
+  },
+  "adjustments": {
+    "size_mult": 1.0,
+    "score_threshold": 0,
+    "max_positions": 5,
+    "allow_entry": true
+  }
+}

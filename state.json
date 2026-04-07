@@ -1,0 +1,72 @@
+{
+  "positions": {
+    "M1N": {
+      "symbol": "M1N",
+      "issuer": "rNyz8UNizxLQwEVqdgHM8R6SEpAdKHuwca",
+      "currency": "",
+      "entry_price": 1.81712308,
+      "entry_time": 1775312431.5247726,
+      "tokens_held": 4.00436992,
+      "xrp_spent": 7.276433,
+      "peak_price": 1.81712308,
+      "current_price": 1.81712308,
+      "tp1_hit": false,
+      "tp2_hit": false,
+      "entry_tvl": 0,
+      "score": 50,
+      "chart_state": "continuation"
+    }
+  },
+  "trade_history": [
+    {
+      "symbol": "BRETT",
+      "action": "sell",
+      "xrp_spent": 4.792244,
+      "xrp_received": 0,
+      "pnl": -4.792244,
+      "pnl_pct": -100,
+      "exit_reason": "forced_dead_token_31hr",
+      "ts": 1775312685.1741798
+    },
+    {
+      "symbol": "XRPH",
+      "action": "sell",
+      "xrp_spent": 1.73,
+      "xrp_received": 0,
+      "pnl": -1.73,
+      "pnl_pct": -100,
+      "exit_reason": "forced_dead_token_30hr",
+      "ts": 1775312685.1741798
+    },
+    {
+      "symbol": "DOBE",
+      "action": "sell",
+      "xrp_spent": 4.767056,
+      "xrp_received": 0,
+      "pnl": -4.767056,
+      "pnl_pct": -100,
+      "exit_reason": "forced_dead_token_30hr",
+      "ts": 1775312685.1741798
+    },
+    {
+      "symbol": "NOX",
+      "action": "sell",
+      "xrp_spent": 4.756403,
+      "xrp_received": 0,
+      "pnl": -4.756403,
+      "pnl_pct": -100,
+      "exit_reason": "forced_dead_token_31hr",
+      "ts": 1775312685.1741798
+    },
+    {
+      "symbol": "Teddy",
+      "action": "sell",
+      "xrp_spent": 9.547047,
+      "xrp_received": 0,
+      "pnl": -9.547047,
+      "pnl_pct": -100,
+      "exit_reason": "forced_dead_token_30hr",
+      "ts": 1775312685.1741798
+    }
+  ]
+}

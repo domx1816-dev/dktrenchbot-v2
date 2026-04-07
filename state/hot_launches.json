@@ -1,0 +1,304 @@
+{
+  "launches": {
+    "5553445400000000000000000000000000000000:rcvxE9PS9YBwxtGg1qNeewV6ZB3wGubZq": {
+      "symbol": "USDT",
+      "dna_score": 60,
+      "dna_flags": [
+        "rug_risk_top_98pct",
+        "whale_conviction_2",
+        "whale_burst_3buys_3000000xrp",
+        "burst_3x_3000000xrp",
+        "burst_3x_3000000xrp"
+      ],
+      "tvl_xrp": 2440.92488,
+      "launch_time": 1775416092.8013587,
+      "expires": 1775417914.559917,
+      "notified": false
+    },
+    "4155444400000000000000000000000000000000:rUN5Zxt3K1AnMRJgEWywDJT8QDMMeLH5ok": {
+      "symbol": "AUDD",
+      "dna_score": 52,
+      "dna_flags": [
+        "concentrated_51pct",
+        "whale_conviction_1",
+        "whale_burst_3buys_30921xrp"
+      ],
+      "tvl_xrp": 1083.001224,
+      "launch_time": 1775446264.654585,
+      "expires": 1775449864.6550636,
+      "notified": false
+    },
+    "CTF:r9Xzi4KsSF1Xtr8WHyBmUcvfP9FzTyG5wp": {
+      "symbol": "CTF",
+      "dna_score": 42,
+      "dna_flags": [
+        "rug_risk_top_100pct",
+        "whale_conviction_2",
+        "whale_burst_3buys_555xrp"
+      ],
+      "tvl_xrp": 3673.921869,
+      "launch_time": 1775433878.0544188,
+      "expires": 1775437478.054887,
+      "notified": false
+    },
+    "4555524F50000000000000000000000000000000:rMkEuRii9w9uBMQDnWV5AA43gvYZR9JxVK": {
+      "symbol": "EUROP",
+      "dna_score": 52,
+      "dna_flags": [
+        "concentrated_53pct",
+        "whale_conviction_2",
+        "whale_burst_3buys_22381xrp"
+      ],
+      "tvl_xrp": 424.920714,
+      "launch_time": 1775446349.6330204,
+      "expires": 1775449949.6334918,
+      "notified": false
+    },
+    "RPR:r3qWgpz2ry3BhcRJ8JE6rxM8esrfhuKp4R": {
+      "symbol": "RPR",
+      "dna_score": 60,
+      "dna_flags": [
+        "whale_conviction_1",
+        "whale_burst_3buys_363xrp",
+        "burst_3x_1085xrp",
+        "burst_3x_3810xrp"
+      ],
+      "tvl_xrp": 6630.854169,
+      "launch_time": 1775418469.2632556,
+      "expires": 1775442593.6687493,
+      "notified": false
+    },
+    "584A4F5900000000000000000000000000000000:rJAvx8FtrLR3RyZyM1LyVQFxxsLdT1PmdS": {
+      "symbol": "XJOY",
+      "dna_score": 60,
+      "dna_flags": [
+        "rug_risk_top_99pct",
+        "whale_conviction_2",
+        "political_narrative",
+        "whale_burst_3buys_857xrp",
+        "burst_4x_557xrp"
+      ],
+      "tvl_xrp": 7270.345294,
+      "launch_time": 1775419624.0368094,
+      "expires": 1775421490.920376,
+      "notified": false
+    },
+    "6175726100000000000000000000000000000000:rpjuvqrH37RGzb88UVibzCQYSNrM9FxJDy": {
+      "symbol": "aura",
+      "dna_score": 60,
+      "dna_flags": [
+        "distributed",
+        "whale_conviction_2",
+        "whale_burst_3buys_1544xrp",
+        "burst_3x_417xrp"
+      ],
+      "tvl_xrp": 8407.054705,
+      "launch_time": 1775420223.1722102,
+      "expires": 1775447559.0091283,
+      "notified": false
+    },
+    "ape:rnxGEQytwx7jDfoKXfot9G4gQ1pbuHwf9m": {
+      "symbol": "ape",
+      "dna_score": 57,
+      "dna_flags": [
+        "concentrated_57pct",
+        "whale_conviction_1",
+        "political_narrative",
+        "whale_burst_3buys_302xrp"
+      ],
+      "tvl_xrp": 6424.209257,
+      "launch_time": 1775420369.2989483,
+      "expires": 1775423969.299396,
+      "notified": false
+    },
+    "4752494D00000000000000000000000000000000:rHLRdLwXiBZSD53ZQz8ogGJz25LzNCCjSz": {
+      "symbol": "GRIM",
+      "dna_score": 50,
+      "dna_flags": [
+        "whale_conviction_3",
+        "whale_burst_3buys_204xrp"
+      ],
+      "tvl_xrp": 18896.425138,
+      "launch_time": 1775421453.414439,
+      "expires": 1775425053.4148939,
+      "notified": false
+    },
+    "5363686D65636B6C657300000000000000000000:rPxw83ZP6thv7KmG5DpAW4cDW55DZRZ9wu": {
+      "symbol": "Schmeckles",
+      "dna_score": 27,
+      "dna_flags": [
+        "concentrated_51pct",
+        "whale_conviction_2",
+        "whale_burst_3buys_265xrp"
+      ],
+      "tvl_xrp": 13555.930591,
+      "launch_time": 1775429017.7499974,
+      "expires": 1775432617.7504208,
+      "notified": false
+    },
+    "5852505300000000000000000000000000000000:rN1bCPAxHDvyJzvkUso1L2wvXufgE4gXPL": {
+      "symbol": "XRPS",
+      "dna_score": 35,
+      "dna_flags": [
+        "too_mature",
+        "whale_burst_3buys_5537xrp",
+        "burst_3x_5520xrp"
+      ],
+      "tvl_xrp": 74218.484169,
+      "launch_time": 1775429905.2972834,
+      "expires": 1775435558.4786952,
+      "notified": false
+    },
+    "504947454F4E5300000000000000000000000000:rfQVVT7X5FynwK87EczgP2T8RQXmQcQSf": {
+      "symbol": "PIGEONS",
+      "dna_score": 38,
+      "dna_flags": [
+        "whale_conviction_1",
+        "whale_burst_3buys_852xrp"
+      ],
+      "tvl_xrp": 9627.295244,
+      "launch_time": 1775430676.0464997,
+      "expires": 1775434276.0467887,
+      "notified": false
+    },
+    "LTC:rcRzGWq6Ng3jeYhqnmM4zcWcUh69hrQ8V": {
+      "symbol": "LTC",
+      "dna_score": 60,
+      "dna_flags": [
+        "whale_conviction_4",
+        "whale_burst_3buys_7721xrp",
+        "burst_3x_8616xrp",
+        "burst_3x_7723xrp",
+        "burst_3x_8620xrp",
+        "burst_3x_7723xrp",
+        "burst_3x_7720xrp",
+        "burst_3x_8619xrp"
+      ],
+      "tvl_xrp": 1099.480099,
+      "launch_time": 1775431093.4643288,
+      "expires": 1775435562.5588295,
+      "notified": false
+    },
+    "24464C4950505900000000000000000000000000:rsENFmELvj92orrCKTkDTug53MzwsB7zBd": {
+      "symbol": "$FLIPPY",
+      "dna_score": 48,
+      "dna_flags": [
+        "whale_conviction_3",
+        "whale_burst_3buys_2146xrp"
+      ],
+      "tvl_xrp": 15908.08351,
+      "launch_time": 1775435347.0757864,
+      "expires": 1775438947.076166,
+      "notified": false
+    },
+    "5745544800000000000000000000000000000000:rfmS3zqrQrka8wVyhXifEeyTwe8AMz2Yhw": {
+      "symbol": "WETH",
+      "dna_score": 20,
+      "dna_flags": [
+        "too_mature",
+        "whale_burst_3buys_1346xrp"
+      ],
+      "tvl_xrp": 95176.199276,
+      "launch_time": 1775436334.6770828,
+      "expires": 1775439934.6772976,
+      "notified": false
+    },
+    "524950504C450000000000000000000000000000:rMgrYs2XYgbGaLZ19HbUXfi9rpsaFQYwgc": {
+      "symbol": "RIPPLE",
+      "dna_score": 45,
+      "dna_flags": [
+        "concentrated_35pct",
+        "whale_conviction_3",
+        "whale_burst_3buys_223xrp"
+      ],
+      "tvl_xrp": 3351.1106,
+      "launch_time": 1775437715.9971013,
+      "expires": 1775441315.997557,
+      "notified": false
+    },
+    "OPM:rhdG26oZL6QKzSXsVfHGSzdXsTxR6RZ23X": {
+      "symbol": "OPM",
+      "dna_score": 60,
+      "dna_flags": [
+        "distributed",
+        "whale_burst_3buys_619xrp",
+        "burst_3x_619xrp",
+        "burst_3x_215xrp",
+        "burst_3x_618xrp"
+      ],
+      "tvl_xrp": 3063.667954,
+      "launch_time": 1775441148.451981,
+      "expires": 1775444071.9366443,
+      "notified": false
+    },
+    "XAG:rpG9E7B3ocgaKqG7vmrsu3jmGwex8W4xAG": {
+      "symbol": "XAG",
+      "dna_score": 55,
+      "dna_flags": [
+        "concentrated_44pct",
+        "whale_conviction_1",
+        "political_narrative",
+        "whale_burst_3buys_718xrp"
+      ],
+      "tvl_xrp": 1483.990101,
+      "launch_time": 1775441687.9481168,
+      "expires": 1775445287.9484053,
+      "notified": false
+    },
+    "5343485745504500000000000000000000000000:rUQXurByxmKni4aLpuWMYMxxV5GWT1Azw2": {
+      "symbol": "SCHWEPE",
+      "dna_score": 40,
+      "dna_flags": [
+        "concentrated_56pct",
+        "whale_conviction_3",
+        "whale_burst_3buys_217xrp"
+      ],
+      "tvl_xrp": 11630.59095,
+      "launch_time": 1775441816.2455828,
+      "expires": 1775445416.2460623,
+      "notified": false
+    },
+    "4641524D00000000000000000000000000000000:rPrAEfVATUNDTJm9CUa8tYeD7oJrVdEGhU": {
+      "symbol": "FARM",
+      "dna_score": 32,
+      "dna_flags": [
+        "concentrated_40pct",
+        "whale_conviction_2",
+        "whale_burst_3buys_311xrp"
+      ],
+      "tvl_xrp": 12025.633005,
+      "launch_time": 1775442917.7051191,
+      "expires": 1775446517.7054365,
+      "notified": false
+    },
+    "58525061794E6574000000000000000000000000:r9rRLst96Ue4YTDQkWWkX1ePB6p6Ye4FkA": {
+      "symbol": "XRPayNet",
+      "dna_score": 56,
+      "dna_flags": [
+        "concentrated_48pct",
+        "whale_conviction_1",
+        "political_narrative",
+        "whale_burst_3buys_307xrp"
+      ],
+      "tvl_xrp": 2277.792717,
+      "launch_time": 1775443020.0268219,
+      "expires": 1775446620.027245,
+      "notified": false
+    },
+    "XDC:rL2mB7aK22Fdzvx7Hp277cJcvPNC2V3QeF": {
+      "symbol": "XDC",
+      "dna_score": 60,
+      "dna_flags": [
+        "distributed",
+        "whale_conviction_5",
+        "political_narrative",
+        "whale_burst_3buys_2526xrp"
+      ],
+      "tvl_xrp": 2405.934031,
+      "launch_time": 1775443182.5342236,
+      "expires": 1775446782.5345025,
+      "notified": false
+    }
+  },
+  "tg_chat_id": null
+}

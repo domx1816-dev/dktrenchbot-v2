@@ -1,0 +1,29 @@
+============================================================
+  DKTrenchBot Daily Report — 2026-04-03 23:50 UTC
+============================================================
+
+── BALANCE ──────────────────────────────────────
+  XRP Balance:      0.0000 XRP
+  Total PnL:        -1.8174 XRP
+
+── PERFORMANCE ──────────────────────────────────
+  Total Trades:     1
+  Wins / Losses:    0 / 1
+  Win Rate:         0.0%
+  Best Trade:       +0.0%
+  Worst Trade:      -16.4%
+  Consecutive Loss: 1
+
+── REGIME ───────────────────────────────────────
+  Current Regime:   NEUTRAL
+
+── TOP TRADES ───────────────────────────────────
+  Best:  PHX -16.4% (hard_stop_early)
+  Worst: PHX -16.4% (hard_stop_early)
+
+── CHART STATE PERFORMANCE ──────────────────────
+  continuation         n=1 wr=0% avg=-16.4%
+
+── SYSTEM HEALTH ────────────────────────────────
+  Bot Loop:         OK
+============================================================

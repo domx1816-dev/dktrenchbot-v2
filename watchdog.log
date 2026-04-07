@@ -1,0 +1,22 @@
+watchdog.sh: line 74: 86937 Killed                  nohup python3 -u bot.py >> bot.log 2>&1
+watchdog.sh: line 74: 88128 Killed                  nohup python3 -u bot.py >> bot.log 2>&1
+watchdog.sh: line 1: 91184 Killed                  nohup python3 -u bot.py >> bot.log 2>&1
+ 2>&1
+[20:04:01] bot.py not running — starting...
+[20:05:58] bot.py not running — starting...
+watchdog.sh: line 49: 86767 Killed                  nohup python3 -u bot.py >> bot.log 2>&1
+[20:16:58] bot.py not running — starting...
+[20:17:01] Duplicate DKBot (PID 88128) — killing
+[20:23:29] Duplicate DKBot (PID 88133) — killing
+[20:54:31] bot.py not running — starting...
+[21:16:33] Duplicate DKBot (PID 91184) — killing
+[21:35:04] Duplicate DKBot (PID 93219) — killing
+[21:40:34] Duplicate DKBot (PID 94945) — killing
+[21:54:35] Duplicate TG listener (PID 12547) — killing
+[21:55:05] tg_signal_listener not running — starting...
+[00:52:44] bot.py not running — starting...
+[01:12:45] Duplicate DKBot (PID 120287) — killing
+watchdog.sh: line 49: 120287 Killed                  nohup python3 -u bot.py >> bot.log 2>&1
+[01:19:45] Duplicate DKBot (PID 122455) — killing
+[01:34:55] Duplicate DKBot (PID 123217) — killing
+[03:29:03] Duplicate DKBot (PID 124859) — killing

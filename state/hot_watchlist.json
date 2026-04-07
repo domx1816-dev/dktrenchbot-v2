@@ -1,0 +1,58 @@
+[
+  {
+    "symbol": "PHX",
+    "currency": "PHX",
+    "issuer": "rskkPc3Eea3phZmzYqdoRFXeHg1GF7oVzG",
+    "tvl_xrp": 5966.0,
+    "source": "hot_xrpl_to"
+  },
+  {
+    "symbol": "XLM",
+    "currency": "XLM",
+    "issuer": "rKiCet8SdvWxPXnAgYarFUXMh1zCPz432Y",
+    "tvl_xrp": 120280.78,
+    "source": "hot_xrpl_to"
+  },
+  {
+    "symbol": "XRPHX",
+    "currency": "5852504858000000000000000000000000000000",
+    "issuer": "rKcj7mdNwijbG6NfzJBLcgJZBaix6tQVdJ",
+    "tvl_xrp": 518.58,
+    "source": "hot_xrpl_to"
+  },
+  {
+    "symbol": "RDC",
+    "currency": "RDC",
+    "issuer": "rDuckCoinu8jntxtYoWRhEv4oNvsLYx6EQ",
+    "tvl_xrp": 582.44,
+    "source": "hot_xrpl_to"
+  },
+  {
+    "symbol": "ROBIN",
+    "currency": "524F42494E000000000000000000000000000000",
+    "issuer": "rDRGHABJHtiN2MteCde9GLtiq6yBi36Lwq",
+    "tvl_xrp": 584.47,
+    "source": "hot_xrpl_to"
+  },
+  {
+    "symbol": "brizzly",
+    "currency": "6272697A7A6C7900000000000000000000000000",
+    "issuer": "rEq1Xd7jAFZR4bThPBqnPFRFGFTiefDPKQ",
+    "tvl_xrp": 859.42,
+    "source": "hot_xrpl_to"
+  },
+  {
+    "symbol": "PROPHET",
+    "currency": "50524F5048455400000000000000000000000000",
+    "issuer": "rMzpoATg67qNZZtv6P87WCkLUM1YoNvcMf",
+    "tvl_xrp": 521.06,
+    "source": "hot_xrpl_to"
+  },
+  {
+    "symbol": "PRSV",
+    "currency": "5052535600000000000000000000000000000000",
+    "issuer": "rBW2GShxKz4PEG7VoYZyTx1aYsng7V1vGz",
+    "tvl_xrp": 519.98,
+    "source": "hot_xrpl_to"
+  }
+]

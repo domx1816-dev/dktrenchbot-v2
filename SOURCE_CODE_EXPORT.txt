@@ -1,0 +1,2314 @@
+================================================================================
+DKTrenchBot v2 — Full Source Code Export
+Generated: 2026-04-07
+Location: /home/agent/workspace/trading-bot-v2/
+Total: 13,016 lines across ~40 Python files
+
+KEY NEW MODULES (April 2026 Upgrade):
+1. new_wallet_discovery.py  — Smart wallet auto-discovery from trade winners
+2. wallet_cluster.py        — Realtime cluster detection via WebSocket
+3. alpha_recycler.py        — Sell-winner → buy-new pattern tracker
+4. dynamic_tp.py            — 3-layer dynamic exit system
+
+MODIFIED FILES:
+- config.py                 — Added TRACKED_WALLETS, DYNAMIC_TP_ENABLED
+- bot.py                    — Integrated all 4 new modules
+- scoring.py                — Added cluster (+30) and alpha (+25) boosts
+
+================================================================================
+-e 
+
+================================================================================
+=== FILE: new_wallet_discovery.py ===
+415 lines
+================================================================================
+
+"""
+new_wallet_discovery.py — Smart Wallet Auto-Discovery (Audit #1)
+
+Goal: Mine our own trade_history from state.json to auto-discover smart wallets
+that bought alongside us on winners.
+
+Algorithm:
+1. Load state.json trade_history
+2. For each trade where we profited (profit_xrp > 0), get entry_time, currency/issuer, entry_price
+3. Query ledger txs around entry_time ± 10 min to find OTHER wallets that bought the same token
+4. Score those wallets by how well they timed the entry vs ours
+5. If they entered before or at the same time as us on a winner → add to candidate_wallets
+6. Track candidate_wallet conviction over time: if they keep appearing on winners, promote to TRACKED_WALLET
+7. Store discovered wallets in state/discovered_wallets.json
+8. At startup, re-check all historical winners to continuously expand the list
+9. Log discoveries clearly
+
+Key constraint: XRPL has no "AMM history" — use account_tx on the AMM account address
+(pool's account) filtering by currency, or scan ledger for Payment transactions to the
+token issuer in that time window.
+"""
+
+import json
+import os
+import time
+import logging
+import requests
+from typing import Dict, List, Set, Optional, Tuple
+from collections import defaultdict
+
+logger = logging.getLogger("wallet_discovery")
+
+STATE_DIR = os.path.join(os.path.dirname(__file__), "state")
+DISCOVERED_FILE = os.path.join(STATE_DIR, "discovered_wallets.json")
+CLIO_URL = "https://rpc.xrplclaw.com"
+
+# Minimum XRP profit to consider a trade a "winner" worth mining
+MIN_PROFIT_XRP = 1.0
+
+# Time window around our entry to look for co-buyers (seconds)
+ENTRY_WINDOW_SEC = 600  # ±10 minutes
+
+# Conviction threshold: wallet must appear on N winning trades to be promoted
+CONVICTION_THRESHOLD = 3
+
+# Maximum candidates to track
+MAX_CANDIDATES = 100
+
+
+def _rpc(method: str, params: dict, timeout: int = 15) -> Optional[dict]:
+    """Send RPC request to CLIO."""
+    try:
+        resp = requests.post(CLIO_URL, json={"method": method, "params": [params]}, timeout=timeout)
+        result = resp.json().get("result", {})
+        return result
+    except Exception as e:
+        logger.debug(f"RPC error {method}: {e}")
+        return None
+
+
+def _load_state() -> Dict:
+    """Load bot state.json."""
+    state_file = os.path.join(STATE_DIR, "state.json")
+    if os.path.exists(state_file):
+        try:
+            with open(state_file) as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {"trade_history": [], "positions": {}}
+
+
+def _load_discovered() -> Dict:
+    """Load discovered wallets file."""
+    if os.path.exists(DISCOVERED_FILE):
+        try:
+            with open(DISCOVERED_FILE) as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {
+        "candidates": {},   # wallet -> {appearances, tokens, first_seen, last_seen, conviction_score}
+        "tracked": [],      # list of wallet addresses promoted to tracked
+        "last_scan_ledger": 0,
+    }
+
+
+def _save_discovered(data: Dict) -> None:
+    """Save discovered wallets."""
+    os.makedirs(STATE_DIR, exist_ok=True)
+    tmp = DISCOVERED_FILE + ".tmp"
+    try:
+        with open(tmp, "w") as f:
+            json.dump(data, f, indent=2)
+        os.replace(tmp, DISCOVERED_FILE)
+    except Exception:
+        with open(DISCOVERED_FILE, "w") as f:
+            json.dump(data, f, indent=2)
+
+
+def _get_currency_code(symbol: str) -> str:
+    """Convert symbol to XRPL currency code (same logic as config.get_currency)."""
+    s = symbol.upper()
+    if len(s) <= 3:
+        return s.ljust(3)
+    if len(s) == 40 and all(c in "0123456789ABCDEF" for c in s):
+        return s
+    encoded = s.encode("utf-8").hex().upper()
+    return encoded.ljust(40, "0")[:40]
+
+
+def _find_amm_account(currency: str, issuer: str) -> Optional[str]:
+    """
+    Find the AMM pool account for a currency/issuer pair.
+    The AMM account is deterministic but we need to query it.
+    We search for accounts holding this token via account_lines on the issuer.
+    """
+    # Strategy: look for AMM-related accounts by checking who holds large amounts
+    # of this token. The AMM pool will be the largest holder besides the issuer.
+    result = _rpc("account_lines", {
+        "account": issuer,
+        "limit": 100,
+    })
+    if not result or result.get("status") != "success":
+        return None
+
+    lines = result.get("lines", [])
+    # Sort by balance descending — AMM pool should be near top
+    sorted_lines = sorted(lines, key=lambda x: float(x.get("balance", "0")), reverse=True)
+
+    for line in sorted_lines[:5]:
+        peer = line.get("account", "")
+        # AMM accounts typically have very high balances
+        bal = float(line.get("balance", "0"))
+        if bal > 1000000:  # Large holder likely AMM
+            return peer
+
+    return None
+
+
+def _scan_transactions_for_buyers(
+    issuer: str,
+    currency: str,
+    entry_time: float,
+    our_entry_time: float,
+    window_sec: int = ENTRY_WINDOW_SEC,
+) -> List[Dict]:
+    """
+    Scan transactions on the issuer account around entry_time to find buyers.
+    Returns list of {wallet, ts, amount_xrp} for wallets that bought the token.
+    """
+    buyers = []
+    cutoff_start = entry_time - window_sec
+    cutoff_end = entry_time + window_sec
+
+    # Convert to Ripple epoch for comparison
+    ripple_cutoff_start = cutoff_start - 946684800
+    ripple_cutoff_end = cutoff_end - 946684800
+
+    result = _rpc("account_tx", {
+        "account": issuer,
+        "limit": 100,
+        "ledger_index_min": -1,
+        "ledger_index_max": -1,
+    })
+
+    if not result or result.get("status") != "success":
+        return buyers
+
+    for tx_wrapper in result.get("transactions", []):
+        tx = tx_wrapper.get("tx", {})
+        meta = tx_wrapper.get("meta", {})
+        tx_type = tx.get("TransactionType", "")
+        tx_date = tx.get("date", 0)  # Ripple epoch seconds
+
+        # Convert to Unix epoch
+        tx_time_unix = tx_date + 946684800
+
+        # Check time window
+        if tx_time_unix < cutoff_start or tx_time_unix > cutoff_end:
+            continue
+
+        sender = tx.get("Account", "")
+        if not sender:
+            continue
+
+        # Skip our own wallet
+        from config import BOT_WALLET_ADDRESS
+        if sender == BOT_WALLET_ADDRESS:
+            continue
+
+        # Detect buys: OfferCreate where TakerPays=token, TakerGets=XRP
+        if tx_type == "OfferCreate":
+            tp = tx.get("TakerPays", {})
+            tg = tx.get("TakerGets", {})
+
+            # Buying token: paying token, getting XRP
+            if (isinstance(tp, dict) and
+                tp.get("currency") == currency and
+                tp.get("issuer") == issuer and
+                isinstance(tg, str)):
+
+                try:
+                    xrp_amount = int(tg) / 1e6
+                    buyers.append({
+                        "wallet": sender,
+                        "ts": tx_time_unix,
+                        "amount_xrp": xrp_amount,
+                        "timing_offset": tx_time_unix - our_entry_time,
+                    })
+                except (ValueError, TypeError):
+                    pass
+
+        elif tx_type == "Payment":
+            # Direct payment of token
+            amt = tx.get("Amount", {})
+            if isinstance(amt, dict) and amt.get("currency") == currency and amt.get("issuer") == issuer:
+                dest = tx.get("Destination", "")
+                if dest:
+                    buyers.append({
+                        "wallet": dest,
+                        "ts": tx_time_unix,
+                        "amount_xrp": 0,  # Can't determine XRP value easily
+                        "timing_offset": tx_time_unix - our_entry_time,
+                    })
+
+    return buyers
+
+
+def _score_wallet_timing(buyers: List[Dict], our_entry_time: float) -> Dict[str, float]:
+    """
+    Score wallets by how well they timed their entry relative to ours.
+    Earlier entry = higher score. Same time = good. Later = lower.
+    Returns {wallet: score} where score is 0-100.
+    """
+    scores = {}
+    for buyer in buyers:
+        offset = buyer["timing_offset"]  # negative = before us, positive = after us
+        wallet = buyer["wallet"]
+
+        # Scoring: entered before us = 80-100, same time = 70-80, within 5min after = 50-70
+        if offset <= 0:
+            # Entered before or at same time — best signal
+            score = max(70, min(100, 80 + abs(offset) / 60))  # +1 per minute early
+        elif offset <= 300:
+            # Within 5 min after us — still good, they saw the same signal
+            score = max(50, 70 - offset / 15)  # -1 per 15 sec late
+        else:
+            # More than 5 min late — weaker signal
+            score = max(20, 50 - (offset - 300) / 30)
+
+        # Accumulate if wallet appears multiple times
+        scores[wallet] = scores.get(wallet, 0) + score
+
+    return scores
+
+
+def discover_smart_wallets(force_rescan: bool = False) -> Dict:
+    """
+    Main discovery function. Mines trade_history for winning trades and finds
+    co-buying wallets. Returns updated discovered data.
+    """
+    logger.info("🔍 Starting smart wallet discovery...")
+
+    state = _load_state()
+    discovered = _load_discovered()
+    trade_history = state.get("trade_history", [])
+
+    # Filter to winning trades only
+    winners = [
+        t for t in trade_history
+        if t.get("pnl_xrp", 0) > MIN_PROFIT_XRP
+    ]
+
+    if not winners:
+        logger.info("No winning trades found to mine.")
+        return discovered
+
+    logger.info(f"Found {len(winners)} winning trades (pnl_xrp > {MIN_PROFIT_XRP})")
+
+    new_candidates = defaultdict(lambda: {
+        "appearances": 0,
+        "tokens": set(),
+        "total_score": 0.0,
+        "first_seen": time.time(),
+        "last_seen": 0,
+        "win_details": [],
+    })
+
+    for trade in winners:
+        symbol = trade.get("symbol", "")
+        issuer = trade.get("issuer", "")
+        entry_time = trade.get("entry_time", 0)
+        pnl_xrp = trade.get("pnl_xrp", 0)
+        exit_reason = trade.get("exit_reason", "")
+
+        if not symbol or not issuer or not entry_time:
+            continue
+
+        currency = _get_currency_code(symbol)
+        logger.info(f"  Mining winner: {symbol} (pnl={pnl_xrp:+.2f} XRP, reason={exit_reason})")
+
+        # Scan for co-buyers around entry time
+        buyers = _scan_transactions_for_buyers(
+            issuer=issuer,
+            currency=currency,
+            entry_time=entry_time,
+            our_entry_time=entry_time,
+        )
+
+        if not buyers:
+            logger.debug(f"    No co-buyers found for {symbol}")
+            continue
+
+        # Score timing
+        timing_scores = _score_wallet_timing(buyers, entry_time)
+
+        for wallet, score in timing_scores.items():
+            # Only consider wallets that entered before or close to our entry
+            # (within 5 min after is acceptable — they may have seen the same signal)
+            matching_buyers = [b for b in buyers if b["wallet"] == wallet]
+            earliest_offset = min(b["timing_offset"] for b in matching_buyers)
+
+            # Key criterion: they entered before or at roughly the same time as us
+            if earliest_offset <= 300:  # within 5 min of our entry
+                cand = new_candidates[wallet]
+                cand["appearances"] += 1
+                cand["tokens"].add(symbol)
+                cand["total_score"] += score
+                cand["last_seen"] = time.time()
+                cand["win_details"].append({
+                    "symbol": symbol,
+                    "pnl_xrp": pnl_xrp,
+                    "exit_reason": exit_reason,
+                    "our_entry": entry_time,
+                    "their_offset": earliest_offset,
+                })
+                logger.info(f"    🎯 Candidate: {wallet[:8]}... appeared on {symbol} "
+                          f"(offset={earliest_offset:+.0f}s, score={score:.0f})")
+
+    # Merge with existing candidates
+    for wallet, data in new_candidates.items():
+        existing = discovered["candidates"].get(wallet, {})
+        existing["appearances"] = existing.get("appearances", 0) + data["appearances"]
+        existing_tokens = set(existing.get("tokens", []))
+        existing_tokens.update(data["tokens"])
+        existing["tokens"] = list(existing_tokens)
+        existing["total_score"] = existing.get("total_score", 0) + data["total_score"]
+        existing["last_seen"] = max(existing.get("last_seen", 0), data["last_seen"])
+        if "first_seen" not in existing:
+            existing["first_seen"] = data["first_seen"]
+        existing_wins = existing.get("win_details", [])
+        existing_wins.extend(data["win_details"])
+        # Keep last 20 win details
+        existing["win_details"] = existing_wins[-20:]
+
+        # Calculate conviction score: appearances * avg_score / 100
+        avg_score = existing["total_score"] / max(existing["appearances"], 1)
+        existing["conviction_score"] = round(avg_score * existing["appearances"] / 10, 2)
+
+        discovered["candidates"][wallet] = existing
+
+    # Promote high-conviction candidates to tracked
+    newly_tracked = []
+    for wallet, data in list(discovered["candidates"].items()):
+        if (data["appearances"] >= CONVICTION_THRESHOLD and
+            wallet not in discovered["tracked"]):
+            discovered["tracked"].append(wallet)
+            newly_tracked.append(wallet)
+            logger.info(f"  ⭐ PROMOTED to tracked: {wallet} "
+                       f"(appearances={data['appearances']}, conviction={data['conviction_score']})")
+
+    # Prune low-quality candidates (keep top MAX_CANDIDATES by conviction)
+    if len(discovered["candidates"]) > MAX_CANDIDATES:
+        sorted_cands = sorted(
+            discovered["candidates"].items(),
+            key=lambda x: x[1].get("conviction_score", 0),
+            reverse=True,
+        )
+        keep = dict(sorted_cands[:MAX_CANDIDATES])
+        discovered["candidates"] = keep
+
+    discovered["last_scan_ledger"] = int(time.time())
+    _save_discovered(discovered)
+
+    logger.info(f"✅ Discovery complete: {len(discovered['candidates'])} candidates, "
+               f"{len(discovered['tracked'])} tracked wallets")
+    if newly_tracked:
+        logger.info(f"  Newly tracked: {len(newly_tracked)} wallets")
+
+    return discovered
+
+
+def get_discovered_wallets() -> List[str]:
+    """Return list of all discovered wallet addresses (candidates + tracked)."""
+    discovered = _load_discovered()
+    wallets = set(discovered.get("tracked", []))
+    wallets.update(discovered.get("candidates", {}).keys())
+    return list(wallets)
+
+
+def get_tracked_wallets() -> List[str]:
+    """Return list of promoted tracked wallet addresses."""
+    discovered = _load_discovered()
+    return discovered.get("tracked", [])
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+    result = discover_smart_wallets(force_rescan=True)
+    print(json.dumps({
+        "candidates": len(result["candidates"]),
+        "tracked": len(result["tracked"]),
+        "tracked_addresses": result["tracked"][:10],
+    }, indent=2))
+-e 
+
+================================================================================
+=== FILE: wallet_cluster.py ===
+383 lines
+================================================================================
+
+"""
+wallet_cluster.py — Wallet Clustering on Realtime Stream (Audit #2)
+
+Goal: Alert when 2+ known smart wallets enter the same token on the live stream.
+
+Algorithm:
+1. Load known_wallets = list(config.TRACKED_WALLETS) + discovered_wallets from state/discovered_wallets.json
+2. Subscribe to XRPL websocket stream: wss://rpc.xrplclaw.com/ (CLIO supports account subscriptions)
+3. For each known wallet, watch for incoming Payments (TrustSet doesn't help — watch Payments to token issuers)
+4. Maintain in-memory dict: token_wallet_map[token] = set of wallets seen in last 10 min
+5. If token_wallet_map[token] has >= 2 distinct known wallets entering within 10 min → CLUSTER_ALERT
+6. Emit cluster_alert to bot_state["signals"]["wallet_cluster"] and log it prominently
+7. The scoring module (scoring.py) should read this signal and boost the token's score significantly (+30 points)
+8. Clean up old entries (10 min TTL on each wallet entry per token)
+9. Graceful reconnect on disconnect
+
+Note on XRPL websocket: CLIO supports `subscribe` with `accounts` field.
+Send: {"command":"subscribe","accounts":[wallet1, wallet2, ...]}
+"""
+
+import json
+import os
+import time
+import logging
+import threading
+import websocket
+from typing import Dict, List, Set, Optional, Callable
+from collections import defaultdict
+
+logger = logging.getLogger("wallet_cluster")
+
+STATE_DIR = os.path.join(os.path.dirname(__file__), "state")
+SIGNALS_FILE = os.path.join(STATE_DIR, "cluster_signals.json")
+WS_URL = "wss://rpc.xrplclaw.com/"
+
+# Time-to-live for wallet entries per token (seconds)
+ENTRY_TTL_SEC = 600  # 10 minutes
+
+# Minimum wallets to trigger cluster alert
+CLUSTER_THRESHOLD = 2
+
+# Reconnect delay (seconds)
+RECONNECT_DELAY = 5
+
+
+class WalletClusterMonitor:
+    """Monitors known wallets for coordinated token entries."""
+
+    def __init__(self):
+        self._ws: Optional[websocket.WebSocketApp] = None
+        self._running = False
+        self._token_wallet_map: Dict[str, Dict[str, float]] = {}  # token -> {wallet: ts}
+        self._cluster_alerts: List[Dict] = []
+        self._known_wallets: Set[str] = set()
+        self._lock = threading.Lock()
+        self._bot_state_ref: Optional[dict] = None  # Reference to bot_state for signal injection
+        self._on_alert_callback: Optional[Callable] = None
+
+    def load_known_wallets(self) -> Set[str]:
+        """Load tracked wallets from config and discovered_wallets.json."""
+        wallets = set()
+
+        # From config TRACKED_WALLETS
+        try:
+            from config import TRACKED_WALLETS
+            if isinstance(TRACKED_WALLETS, (list, tuple)):
+                wallets.update(TRACKED_WALLETS)
+        except (ImportError, AttributeError):
+            pass
+
+        # From discovered_wallets.json
+        discovered_file = os.path.join(STATE_DIR, "discovered_wallets.json")
+        if os.path.exists(discovered_file):
+            try:
+                with open(discovered_file) as f:
+                    data = json.load(f)
+                wallets.update(data.get("tracked", []))
+                wallets.update(data.get("candidates", {}).keys())
+            except Exception as e:
+                logger.debug(f"Error loading discovered wallets: {e}")
+
+        self._known_wallets = wallets
+        return wallets
+
+    def _cleanup_expired(self):
+        """Remove expired wallet entries (older than ENTRY_TTL_SEC)."""
+        now = time.time()
+        with self._lock:
+            for token in list(self._token_wallet_map.keys()):
+                self._token_wallet_map[token] = {
+                    w: ts for w, ts in self._token_wallet_map[token].items()
+                    if now - ts < ENTRY_TTL_SEC
+                }
+                # Remove empty tokens
+                if not self._token_wallet_map[token]:
+                    del self._token_wallet_map[token]
+
+    def _record_wallet_entry(self, wallet: str, token_key: str):
+        """Record a wallet entering a token."""
+        now = time.time()
+        with self._lock:
+            if token_key not in self._token_wallet_map:
+                self._token_wallet_map[token_key] = {}
+            self._token_wallet_map[token_key][wallet] = now
+
+        # Check for cluster
+        self._check_cluster(token_key)
+
+    def _check_cluster(self, token_key: str):
+        """Check if token has enough wallets to trigger cluster alert."""
+        now = time.time()
+        with self._lock:
+            wallets_in_window = self._token_wallet_map.get(token_key, {})
+            active_wallets = {
+                w for w, ts in wallets_in_window.items()
+                if now - ts < ENTRY_TTL_SEC
+            }
+
+        if len(active_wallets) >= CLUSTER_THRESHOLD:
+            # Parse token key: "SYMBOL:issuer" or "currency:issuer"
+            parts = token_key.split(":")
+            symbol = parts[0] if parts else token_key
+
+            alert = {
+                "token": token_key,
+                "symbol": symbol,
+                "wallets": list(active_wallets),
+                "count": len(active_wallets),
+                "ts": now,
+                "signal_type": "wallet_cluster",
+            }
+
+            # Dedup: don't re-alert same token within 5 minutes
+            recent_same = [
+                a for a in self._cluster_alerts
+                if a["token"] == token_key and now - a["ts"] < 300
+            ]
+            if not recent_same:
+                self._cluster_alerts.append(alert)
+                # Keep last 50 alerts
+                if len(self._cluster_alerts) > 50:
+                    self._cluster_alerts = self._cluster_alerts[-50:]
+
+                logger.warning(
+                    f"🚨 CLUSTER ALERT: {symbol} — {len(active_wallets)} smart wallets entered! "
+                    f"Wallets: {[w[:10]+'...' for w in active_wallets]}"
+                )
+
+                # Save to signals file
+                self._save_signals()
+
+                # Inject into bot_state if reference available
+                if self._bot_state_ref is not None:
+                    if "signals" not in self._bot_state_ref:
+                        self._bot_state_ref["signals"] = {}
+                    self._bot_state_ref["signals"]["wallet_cluster"] = alert
+
+                # Call callback if registered
+                if self._on_alert_callback:
+                    try:
+                        self._on_alert_callback(alert)
+                    except Exception as e:
+                        logger.error(f"Cluster alert callback error: {e}")
+
+    def _save_signals(self):
+        """Save cluster signals to file."""
+        os.makedirs(STATE_DIR, exist_ok=True)
+        tmp = SIGNALS_FILE + ".tmp"
+        try:
+            with open(tmp, "w") as f:
+                json.dump({
+                    "alerts": self._cluster_alerts[-20:],  # Last 20
+                    "last_updated": time.time(),
+                }, f, indent=2)
+            os.replace(tmp, SIGNALS_FILE)
+        except Exception as e:
+            logger.error(f"Error saving cluster signals: {e}")
+
+    def _handle_message(self, ws, message: str):
+        """Process incoming websocket messages."""
+        try:
+            data = json.loads(message)
+
+            # Transaction notification
+            if data.get("type") == "transaction":
+                tx_data = data.get("transaction", {})
+                meta = data.get("meta", {})
+                tx_type = tx_data.get("TransactionType", "")
+                account = tx_data.get("Account", "")
+
+                # Only process transactions from our known wallets
+                if account not in self._known_wallets:
+                    return
+
+                # Detect token purchases via Payment or OfferCreate
+                if tx_type == "Payment":
+                    amount = tx_data.get("Amount", {})
+                    destination = tx_data.get("Destination", "")
+
+                    # If the payment is a token (not XRP), record it
+                    if isinstance(amount, dict):
+                        currency = amount.get("currency", "")
+                        issuer = amount.get("issuer", "")
+                        if currency and issuer:
+                            token_key = f"{currency}:{issuer}"
+                            self._record_wallet_entry(account, token_key)
+                            logger.info(
+                                f"  📥 {account[:10]}... bought {currency[:8]} via Payment"
+                            )
+
+                elif tx_type == "OfferCreate":
+                    # Detect buy offers: TakerPays=XRP, TakerGets=token
+                    tp = tx_data.get("TakerPays", {})
+                    tg = tx_data.get("TakerGets", {})
+
+                    # Buying token: paying XRP (string), getting token (dict)
+                    if isinstance(tp, str) and isinstance(tg, dict):
+                        currency = tg.get("currency", "")
+                        issuer = tg.get("issuer", "")
+                        if currency and issuer:
+                            token_key = f"{currency}:{issuer}"
+                            self._record_wallet_entry(account, token_key)
+                            logger.info(
+                                f"  📥 {account[:10]}... bought {currency[:8]} via OfferCreate"
+                            )
+
+            elif data.get("type") == "ledgerClosed":
+                # Periodic cleanup on ledger close
+                self._cleanup_expired()
+
+        except Exception as e:
+            logger.debug(f"Message handling error: {e}")
+
+    def _handle_error(self, ws, error):
+        logger.error(f"WebSocket error: {error}")
+
+    def _handle_close(self, ws, close_status_code, close_msg):
+        logger.info(f"WebSocket closed: {close_status_code} {close_msg}")
+        if self._running:
+            logger.info(f"Reconnecting in {RECONNECT_DELAY}s...")
+            time.sleep(RECONNECT_DELAY)
+            self._connect()
+
+    def _handle_open(self, ws):
+        logger.info("WebSocket connected — subscribing to accounts...")
+        self._subscribe_accounts(ws)
+
+    def _subscribe_accounts(self, ws):
+        """Subscribe to account transactions."""
+        if not self._known_wallets:
+            self.load_known_wallets()
+
+        if not self._known_wallets:
+            logger.warning("No known wallets to subscribe to")
+            return
+
+        # XRPL has limits on subscription size — batch if needed
+        wallet_list = list(self._known_wallets)
+        logger.info(f"Subscribing to {len(wallet_list)} wallets...")
+
+        subscribe_msg = {
+            "command": "subscribe",
+            "accounts": wallet_list,
+            "streams": ["ledger"],
+        }
+
+        try:
+            ws.send(json.dumps(subscribe_msg))
+            logger.info("Subscription sent")
+        except Exception as e:
+            logger.error(f"Subscription error: {e}")
+
+    def _connect(self):
+        """Establish WebSocket connection."""
+        self._ws = websocket.WebSocketApp(
+            WS_URL,
+            on_open=self._handle_open,
+            on_message=self._handle_message,
+            on_error=self._handle_error,
+            on_close=self._handle_close,
+        )
+
+        try:
+            self._ws.run_forever()
+        except Exception as e:
+            logger.error(f"WebSocket run error: {e}")
+
+    def start(self, bot_state: Optional[dict] = None, on_alert: Optional[Callable] = None):
+        """Start the cluster monitor in a background thread."""
+        if self._running:
+            logger.warning("Cluster monitor already running")
+            return
+
+        self._running = True
+        self._bot_state_ref = bot_state
+        self._on_alert_callback = on_alert
+        self.load_known_wallets()
+
+        logger.info(f"Starting wallet cluster monitor ({len(self._known_wallets)} wallets)")
+
+        self._thread = threading.Thread(target=self._connect, daemon=True)
+        self._thread.start()
+
+    def stop(self):
+        """Stop the cluster monitor."""
+        self._running = False
+        if self._ws:
+            try:
+                self._ws.close()
+            except Exception:
+                pass
+        logger.info("Wallet cluster monitor stopped")
+
+    def get_active_clusters(self) -> List[Dict]:
+        """Get current active cluster signals."""
+        now = time.time()
+        clusters = []
+        with self._lock:
+            for token, wallets_ts in self._token_wallet_map.items():
+                active = {w for w, ts in wallets_ts.items() if now - ts < ENTRY_TTL_SEC}
+                if len(active) >= CLUSTER_THRESHOLD:
+                    clusters.append({
+                        "token": token,
+                        "wallets": list(active),
+                        "count": len(active),
+                    })
+        return clusters
+
+    def get_cluster_score_boost(self, symbol: str, issuer: str) -> int:
+        """
+        Get score boost for a token based on cluster activity.
+        Returns +30 if cluster detected, 0 otherwise.
+        Called by scoring.py.
+        """
+        token_key = f"{symbol}:{issuer}"
+        now = time.time()
+
+        with self._lock:
+            wallets_ts = self._token_wallet_map.get(token_key, {})
+            active_count = sum(1 for ts in wallets_ts.values() if now - ts < ENTRY_TTL_SEC)
+
+        if active_count >= CLUSTER_THRESHOLD:
+            return 30  # Significant boost
+        return 0
+
+
+# Global instance for integration with bot
+_monitor: Optional[WalletClusterMonitor] = None
+
+
+def start_cluster_monitor(bot_state: Optional[dict] = None, on_alert: Optional[Callable] = None):
+    """Start the global cluster monitor."""
+    global _monitor
+    if _monitor is None:
+        _monitor = WalletClusterMonitor()
+    _monitor.start(bot_state=bot_state, on_alert=on_alert)
+
+
+def stop_cluster_monitor():
+    """Stop the global cluster monitor."""
+    global _monitor
+    if _monitor:
+        _monitor.stop()
+        _monitor = None
+
+
+def get_cluster_boost(symbol: str, issuer: str) -> int:
+    """Get cluster score boost for a token (called by scoring.py)."""
+    global _monitor
+    if _monitor:
+        return _monitor.get_cluster_score_boost(symbol, issuer)
+    return 0
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+    print("Wallet Cluster Monitor — test mode")
+    print("This module runs as a background thread in the main bot.")
+    monitor = WalletClusterMonitor()
+    wallets = monitor.load_known_wallets()
+    print(f"Known wallets: {len(wallets)}")
+    for w in list(wallets)[:5]:
+        print(f"  - {w}")
+-e 
+
+================================================================================
+=== FILE: alpha_recycler.py ===
+407 lines
+================================================================================
+
+"""
+alpha_recycler.py — Alpha Recycling Tracker (Audit #6)
+
+Goal: When a tracked smart wallet sells a winner, immediately look for their NEXT buy.
+This is the best leading indicator.
+
+Algorithm:
+1. Maintain state/alpha_recycler.json: {wallet: {"last_sell": {token, time, pnl_pct}, "next_buy": None}}
+2. Poll account_tx on known smart wallets every 5 minutes
+3. Detect: wallet had a sell transaction (outgoing payment of a token they hold) on a winner
+4. Then: watch for their NEXT incoming payment (buy) of ANY token within next 30 minutes
+5. If that next buy is a token we don't already hold → add to bot_state["signals"]["alpha_recycler"]
+6. Alpha recycler signals get a +25 score boost in scoring.py
+7. Log: "🔁 ALPHA RECYCLE: @wallet sold XYZ at +Yx, just bought ABC"
+"""
+
+import json
+import os
+import time
+import logging
+import requests
+from typing import Dict, List, Optional, Set
+from collections import defaultdict
+
+logger = logging.getLogger("alpha_recycler")
+
+STATE_DIR = os.path.join(os.path.dirname(__file__), "state")
+RECYCLER_FILE = os.path.join(STATE_DIR, "alpha_recycler.json")
+SIGNALS_FILE = os.path.join(STATE_DIR, "alpha_recycler_signals.json")
+CLIO_URL = "https://rpc.xrplclaw.com"
+
+# Poll interval for checking wallet transactions (seconds)
+POLL_INTERVAL_SEC = 300  # 5 minutes
+
+# Window to watch for next buy after a sell (seconds)
+BUY_WINDOW_SEC = 1800  # 30 minutes
+
+# Minimum profit multiple to consider a "winner" sell
+MIN_WIN_MULTIPLE = 1.5  # 1.5x+
+
+
+def _rpc(method: str, params: dict, timeout: int = 15) -> Optional[dict]:
+    """Send RPC request to CLIO."""
+    try:
+        resp = requests.post(CLIO_URL, json={"method": method, "params": [params]}, timeout=timeout)
+        return resp.json().get("result", {})
+    except Exception as e:
+        logger.debug(f"RPC error {method}: {e}")
+        return None
+
+
+def _load_recycler_state() -> Dict:
+    """Load alpha recycler state."""
+    if os.path.exists(RECYCLER_FILE):
+        try:
+            with open(RECYCLER_FILE) as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+
+def _save_recycler_state(data: Dict) -> None:
+    """Save alpha recycler state."""
+    os.makedirs(STATE_DIR, exist_ok=True)
+    tmp = RECYCLER_FILE + ".tmp"
+    try:
+        with open(tmp, "w") as f:
+            json.dump(data, f, indent=2)
+        os.replace(tmp, RECYCLER_FILE)
+    except Exception:
+        with open(RECYCLER_FILE, "w") as f:
+            json.dump(data, f, indent=2)
+
+
+def _load_discovered_wallets() -> Set[str]:
+    """Load tracked and candidate wallets from discovered_wallets.json."""
+    wallets = set()
+
+    # From config TRACKED_WALLETS
+    try:
+        from config import TRACKED_WALLETS
+        if isinstance(TRACKED_WALLETS, (list, tuple)):
+            wallets.update(TRACKED_WALLETS)
+    except (ImportError, AttributeError):
+        pass
+
+    # From discovered_wallets.json
+    discovered_file = os.path.join(STATE_DIR, "discovered_wallets.json")
+    if os.path.exists(discovered_file):
+        try:
+            with open(discovered_file) as f:
+                data = json.load(f)
+            wallets.update(data.get("tracked", []))
+            wallets.update(data.get("candidates", {}).keys())
+        except Exception as e:
+            logger.debug(f"Error loading discovered wallets: {e}")
+
+    return wallets
+
+
+def _get_currency_code(symbol: str) -> str:
+    """Convert symbol to XRPL currency code."""
+    s = symbol.upper()
+    if len(s) <= 3:
+        return s.ljust(3)
+    if len(s) == 40 and all(c in "0123456789ABCDEF" for c in s):
+        return s
+    encoded = s.encode("utf-8").hex().upper()
+    return encoded.ljust(40, "0")[:40]
+
+
+def _get_token_symbol(currency: str, issuer: str) -> str:
+    """Try to resolve currency code back to symbol."""
+    # Check active registry
+    registry_file = os.path.join(STATE_DIR, "active_registry.json")
+    if os.path.exists(registry_file):
+        try:
+            with open(registry_file) as f:
+                registry = json.load(f)
+            for entry in registry.values() if isinstance(registry, dict) else registry:
+                if isinstance(entry, dict):
+                    if entry.get("currency") == currency and entry.get("issuer") == issuer:
+                        return entry.get("symbol", currency[:8])
+        except Exception:
+            pass
+    return currency[:8]  # Fallback to first 8 chars
+
+
+def _check_wallet_transactions(wallet: str, lookback_ledgers: int = 50) -> List[Dict]:
+    """
+    Check recent transactions for a wallet.
+    Returns list of {type, token, currency, issuer, amount, ts, direction} events.
+    direction: 'in' (buy/receive) or 'out' (sell/send)
+    """
+    events = []
+
+    result = _rpc("account_tx", {
+        "account": wallet,
+        "limit": lookback_ledgers,
+        "ledger_index_min": -1,
+        "ledger_index_max": -1,
+    })
+
+    if not result or result.get("status") != "success":
+        return events
+
+    for tx_wrapper in result.get("transactions", []):
+        tx = tx_wrapper.get("tx", {})
+        meta = tx_wrapper.get("meta", {})
+        tx_type = tx.get("TransactionType", "")
+        tx_date = tx.get("date", 0)
+        tx_time_unix = tx_date + 946684800  # Convert Ripple epoch to Unix
+
+        account = tx.get("Account", "")
+        destination = tx.get("Destination", "")
+
+        if tx_type == "OfferCreate":
+            tp = tx.get("TakerPays", {})
+            tg = tx.get("TakerGets", {})
+
+            # Selling token: TakerPays=token, TakerGets=XRP
+            if isinstance(tp, dict) and isinstance(tg, str):
+                currency = tp.get("currency", "")
+                issuer = tp.get("issuer", "")
+                if currency and issuer:
+                    events.append({
+                        "type": "sell",
+                        "direction": "out",
+                        "currency": currency,
+                        "issuer": issuer,
+                        "ts": tx_time_unix,
+                        "wallet": account,
+                    })
+
+            # Buying token: TakerPays=XRP, TakerGets=token
+            elif isinstance(tp, str) and isinstance(tg, dict):
+                currency = tg.get("currency", "")
+                issuer = tg.get("issuer", "")
+                if currency and issuer:
+                    events.append({
+                        "type": "buy",
+                        "direction": "in",
+                        "currency": currency,
+                        "issuer": issuer,
+                        "ts": tx_time_unix,
+                        "wallet": account,
+                    })
+
+        elif tx_type == "Payment":
+            amount = tx.get("Amount", {})
+            if isinstance(amount, dict):
+                currency = amount.get("currency", "")
+                issuer = amount.get("issuer", "")
+                if currency and issuer:
+                    # Determine direction: did this wallet send or receive?
+                    if account == wallet:
+                        direction = "out"  # Wallet sent tokens (sell)
+                    elif destination == wallet:
+                        direction = "in"   # Wallet received tokens (buy)
+                    else:
+                        continue
+
+                    events.append({
+                        "type": "payment",
+                        "direction": direction,
+                        "currency": currency,
+                        "issuer": issuer,
+                        "ts": tx_time_unix,
+                        "wallet": wallet,
+                    })
+
+    return events
+
+
+def _is_token_held_by_bot(token_key: str, bot_state: Optional[Dict] = None) -> bool:
+    """Check if the bot already holds this token."""
+    if bot_state is None:
+        return False
+
+    positions = bot_state.get("positions", {})
+    return token_key in positions
+
+
+def scan_alpha_recycling(bot_state: Optional[Dict] = None) -> List[Dict]:
+    """
+    Main scan function. Checks all tracked wallets for sell→buy patterns.
+    Returns list of new alpha recycle signals.
+    """
+    logger.info("🔄 Scanning alpha recycling...")
+
+    recycler_state = _load_recycler_state()
+    known_wallets = _load_discovered_wallets()
+    now = time.time()
+    new_signals = []
+
+    for wallet in known_wallets:
+        wallet_data = recycler_state.get(wallet, {})
+        last_sell = wallet_data.get("last_sell")
+        next_buy = wallet_data.get("next_buy")
+
+        # Check recent transactions
+        events = _check_wallet_transactions(wallet, lookback_ledgers=30)
+
+        # Look for new sells (winner exits)
+        for event in events:
+            if event["direction"] == "out" and event["type"] in ("sell", "payment"):
+                currency = event["currency"]
+                issuer = event["issuer"]
+                token_key = f"{currency}:{issuer}"
+                symbol = _get_token_symbol(currency, issuer)
+
+                # Record the sell if not already tracked
+                if not last_sell or event["ts"] > last_sell.get("time", 0):
+                    # We can't easily determine PnL without full position history
+                    # Mark as potential winner — will be confirmed if they rebuy
+                    recycler_state[wallet] = {
+                        "last_sell": {
+                            "token": symbol,
+                            "currency": currency,
+                            "issuer": issuer,
+                            "token_key": token_key,
+                            "time": event["ts"],
+                            "pnl_pct": None,  # Unknown without entry price
+                        },
+                        "next_buy": None,
+                        "updated": now,
+                    }
+                    logger.info(
+                        f"  📤 {wallet[:10]}... sold {symbol} — watching for next buy"
+                    )
+
+        # Check if wallet has a pending "watching for buy" state
+        if last_sell and not next_buy:
+            sell_time = last_sell.get("time", 0)
+            elapsed = now - sell_time
+
+            # Still within the buy window?
+            if elapsed < BUY_WINDOW_SEC:
+                # Look for a new buy in recent events
+                for event in events:
+                    if event["direction"] == "in" and event["type"] in ("buy", "payment"):
+                        if event["ts"] > sell_time:  # Buy happened after the sell
+                            buy_currency = event["currency"]
+                            buy_issuer = event["issuer"]
+                            buy_token_key = f"{buy_currency}:{buy_issuer}"
+                            buy_symbol = _get_token_symbol(buy_currency, buy_issuer)
+
+                            # Check if bot already holds this token
+                            if not _is_token_held_by_bot(buy_token_key, bot_state):
+                                signal = {
+                                    "wallet": wallet,
+                                    "sold_token": last_sell.get("token", ""),
+                                    "bought_token": buy_symbol,
+                                    "bought_currency": buy_currency,
+                                    "bought_issuer": buy_issuer,
+                                    "bought_token_key": buy_token_key,
+                                    "sell_time": sell_time,
+                                    "buy_time": event["ts"],
+                                    "delay_sec": event["ts"] - sell_time,
+                                    "context": f"recycled_from_{last_sell.get('token', 'unknown')}",
+                                    "ts": now,
+                                    "signal_type": "alpha_recycler",
+                                }
+
+                                new_signals.append(signal)
+
+                                # Update state
+                                recycler_state[wallet]["next_buy"] = {
+                                    "token": buy_symbol,
+                                    "currency": buy_currency,
+                                    "issuer": buy_issuer,
+                                    "token_key": buy_token_key,
+                                    "time": event["ts"],
+                                }
+
+                                logger.warning(
+                                    f"🔁 ALPHA RECYCLE: {wallet[:10]}... sold "
+                                    f"{last_sell.get('token', '?')} → just bought {buy_symbol}"
+                                )
+
+                                # Save signal to file
+                                _save_signal_to_file(signal)
+
+                                # Inject into bot_state if available
+                                if bot_state is not None:
+                                    if "signals" not in bot_state:
+                                        bot_state["signals"] = {}
+                                    bot_state["signals"]["alpha_recycler"] = signal
+
+                            break  # Only track first buy after sell
+            else:
+                # Window expired — clear the watch
+                if wallet in recycler_state:
+                    recycler_state[wallet]["next_buy"] = None
+                    recycler_state[wallet]["last_sell"] = None
+                    logger.debug(f"  ⏰ Watch expired for {wallet[:10]}...")
+
+    _save_recycler_state(recycler_state)
+
+    if new_signals:
+        logger.info(f"✅ Found {len(new_signals)} alpha recycle signal(s)")
+    else:
+        logger.debug("No new alpha recycle signals")
+
+    return new_signals
+
+
+def _save_signal_to_file(signal: Dict):
+    """Append signal to alpha_recycler_signals.json."""
+    os.makedirs(STATE_DIR, exist_ok=True)
+    try:
+        if os.path.exists(SIGNALS_FILE):
+            with open(SIGNALS_FILE) as f:
+                data = json.load(f)
+        else:
+            data = {"signals": [], "last_updated": 0}
+
+        data["signals"].append(signal)
+        # Keep last 50 signals
+        data["signals"] = data["signals"][-50:]
+        data["last_updated"] = time.time()
+
+        tmp = SIGNALS_FILE + ".tmp"
+        with open(tmp, "w") as f:
+            json.dump(data, f, indent=2)
+        os.replace(tmp, SIGNALS_FILE)
+    except Exception as e:
+        logger.error(f"Error saving alpha recycler signal: {e}")
+
+
+def get_alpha_recycler_boost(symbol: str, issuer: str) -> int:
+    """
+    Get score boost for a token based on alpha recycler activity.
+    Returns +25 if an alpha recycler signal matches this token, 0 otherwise.
+    Called by scoring.py.
+    """
+    signals_file = SIGNALS_FILE
+    if not os.path.exists(signals_file):
+        return 0
+
+    try:
+        with open(signals_file) as f:
+            data = json.load(f)
+
+        now = time.time()
+        token_key = f"{symbol}:{issuer}"
+
+        # Check recent signals (within 30 min)
+        for sig in data.get("signals", []):
+            if sig.get("bought_token_key") == token_key:
+                age = now - sig.get("ts", 0)
+                if age < 1800:  # 30 min TTL
+                    return 25
+    except Exception:
+        pass
+
+    return 0
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+    print("Alpha Recycler — test mode")
+    signals = scan_alpha_recycling()
+    print(f"New signals: {len(signals)}")
+    for sig in signals:
+        print(f"  🔁 {sig['wallet'][:10]}... : {sig['sold_token']} → {sig['bought_token']}")
+-e 
+
+================================================================================
+=== FILE: dynamic_tp.py ===
+490 lines
+================================================================================
+
+"""
+dynamic_tp.py — Dynamic Take-Profit Module (3-Layer Exit System)
+
+Replaces/supplements current TP logic with:
+  Layer 1: Profit Lock (non-negotiable scale-out at 2x, 3x, 5x)
+  Layer 2: Momentum Tracker (adjust exit timing based on momentum)
+  Layer 3: Danger Detection (emergency exits on smart wallet sells, liquidity drops, etc.)
+  Trailing Stop: Enhanced 30% drawdown from peak
+
+Integration:
+  - Exports should_exit(position, bot_state) → {'action': 'hold'|'exit'|'emergency', 'pct': float, 'reason': str}
+  - bot.py calls this in position management loop AFTER scoring, BEFORE execution
+  - Existing TP system is FALLBACK — if dynamic_tp returns 'hold', existing TPs still apply
+  - Config flag: DYNAMIC_TP_ENABLED = True
+"""
+
+import json
+import os
+import time
+import logging
+from typing import Dict, List, Optional, Tuple
+
+logger = logging.getLogger("dynamic_tp")
+
+STATE_DIR = os.path.join(os.path.dirname(__file__), "state")
+MOMENTUM_FILE = os.path.join(STATE_DIR, "momentum_tracker.json")
+DANGER_FILE = os.path.join(STATE_DIR, "danger_signals.json")
+
+# ── Layer 1: Profit Lock thresholds ───────────────────────────────────────────
+TP_2X_SELL_PCT = 0.50   # Sell 50% at 2x
+TP_3X_SELL_PCT = 0.20   # Sell 20% at 3x
+TP_5X_SELL_PCT = 0.15   # Sell 15% at 5x
+
+# ── Layer 2: Momentum tracking ────────────────────────────────────────────────
+MOMENTUM_INCREASE_THRESHOLD = 0.2   # Score change to detect trend
+MOMENTUM_DECREASE_THRESHOLD = 0.2
+MAX_HOLD_CYCLES_STRONG = 5          # Don't hold more than 5 cycles on strong momentum
+
+# ── Layer 3: Danger detection thresholds ──────────────────────────────────────
+SMART_WALLET_SELL_COUNT = 2         # 2+ smart wallets selling = emergency
+LIQUIDITY_DROP_THRESHOLD = 0.75     # Liquidity < 75% of peak = emergency
+PARABOLIC_SPIKE_MULT = 1.80         # Price > 1.8x peak 5min ago = spike
+VOLUME_COLLAPSE_THRESHOLD = 0.50    # Volume < 50% of peak + held > 15 min
+TIME_EXPIRED_MIN = 120              # Exit after 2 hours if momentum < 0.8
+
+# ── Trailing Stop ─────────────────────────────────────────────────────────────
+TRAILING_STOP_DRAWDOWN = 0.30       # 30% drawdown from peak = sell all
+
+
+def _load_momentum_tracker() -> Dict:
+    """Load momentum tracking state."""
+    if os.path.exists(MOMENTUM_FILE):
+        try:
+            with open(MOMENTUM_FILE) as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+
+def _save_momentum_tracker(data: Dict) -> None:
+    """Save momentum tracking state."""
+    os.makedirs(STATE_DIR, exist_ok=True)
+    tmp = MOMENTUM_FILE + ".tmp"
+    try:
+        with open(tmp, "w") as f:
+            json.dump(data, f, indent=2)
+        os.replace(tmp, MOMENTUM_FILE)
+    except Exception:
+        with open(MOMENTUM_FILE, "w") as f:
+            json.dump(data, f, indent=2)
+
+
+def _compute_momentum_score(
+    token_key: str,
+    price_history: List[float],
+    tvl_history: List[float] = None,
+    new_buyers_5min: int = 0,
+    baseline_buyer_rate: float = 1.0,
+    trustlines_added_5min: int = 0,
+) -> Tuple[float, str]:
+    """
+    Compute momentum score for a token.
+    Returns (score, direction) where:
+      score: 0.0 = bearish, 1.0 = neutral, 2.0+ = strong momentum
+      direction: "increasing", "decreasing", or "stable"
+    """
+    if tvl_history is None:
+        tvl_history = []
+
+    # Wallet inflow (normalized)
+    wallet_inflow = new_buyers_5min / max(baseline_buyer_rate, 0.1)
+
+    # Volume growth (using TVL as proxy)
+    if len(tvl_history) >= 2:
+        volume_growth = (tvl_history[-1] - tvl_history[0]) / max(tvl_history[0], 1)
+    else:
+        volume_growth = 0.0
+
+    # New trustlines
+    new_tl_normalized = min(trustlines_added_5min, 10) / 10
+
+    # Composite momentum score
+    momentum_score = (
+        min(wallet_inflow, 3.0) * 0.4 +
+        min(volume_growth, 2.0) * 0.3 +
+        new_tl_normalized * 0.3
+    )
+
+    # Track trend
+    tracker = _load_momentum_tracker()
+    prev_score = tracker.get(token_key, {}).get("last_score", momentum_score)
+
+    if momentum_score > prev_score + MOMENTUM_INCREASE_THRESHOLD:
+        direction = "increasing"
+    elif momentum_score < prev_score - MOMENTUM_DECREASE_THRESHOLD:
+        direction = "decreasing"
+    else:
+        direction = "stable"
+
+    # Update tracker
+    tracker[token_key] = {
+        "last_score": momentum_score,
+        "direction": direction,
+        "updated": time.time(),
+    }
+    _save_momentum_tracker(tracker)
+
+    return momentum_score, direction
+
+
+def _check_danger_signals(
+    position: Dict,
+    bot_state: Dict,
+    current_price: float,
+    current_tvl: float,
+) -> Optional[Dict]:
+    """
+    Check Layer 3 danger signals. Returns emergency exit signal if any triggered.
+    """
+    symbol = position.get("symbol", "")
+    issuer = position.get("issuer", "")
+    token_key = f"{symbol}:{issuer}"
+    entry_time = position.get("entry_time", time.time())
+    time_in_trade_min = (time.time() - entry_time) / 60
+
+    # Signal 1: Smart wallet exits
+    # Check if tracked smart wallets sold this token recently
+    smart_selling = 0
+    try:
+        from config import TRACKED_WALLETS
+        tracked = list(TRACKED_WALLETS) if hasattr(__import__('config'), 'TRACKED_WALLETS') else []
+    except ImportError:
+        tracked = []
+
+    # Also check discovered wallets
+    discovered_file = os.path.join(STATE_DIR, "discovered_wallets.json")
+    if os.path.exists(discovered_file):
+        try:
+            with open(discovered_file) as f:
+                disc = json.load(f)
+            tracked.extend(disc.get("tracked", []))
+        except Exception:
+            pass
+
+    # Check recent trade history for smart wallet sells on this token
+    trade_history = bot_state.get("trade_history", [])
+    now = time.time()
+    for trade in trade_history[-50:]:  # Last 50 trades
+        if trade.get("symbol") == symbol and trade.get("exit_reason", "").startswith("tp"):
+            # This was our exit — check if smart wallets were also selling
+            smart_wallets = trade.get("smart_wallets", [])
+            if smart_wallets:
+                smart_selling += len(smart_wallets)
+
+    if smart_selling >= SMART_WALLET_SELL_COUNT:
+        return {
+            "action": "emergency",
+            "pct": 0.75,
+            "reason": f"smart_wallet_exit ({smart_selling} wallets)",
+        }
+
+    # Signal 2: Liquidity drop
+    peak_tvl = position.get("peak_tvl", current_tvl)
+    if peak_tvl > 0 and current_tvl < peak_tvl * LIQUIDITY_DROP_THRESHOLD:
+        drop_pct = (peak_tvl - current_tvl) / peak_tvl
+        return {
+            "action": "emergency",
+            "pct": 1.0,
+            "reason": f"liquidity_drop_{drop_pct:.0%}",
+        }
+
+    # Signal 3: Parabolic spike
+    # Compare current price to peak 5 minutes ago (approximate via price history)
+    price_history = position.get("price_history_5min", [])
+    if price_history:
+        peak_5min_ago = max(price_history[-5:]) if len(price_history) >= 5 else price_history[0]
+        if peak_5min_ago > 0 and current_price > peak_5min_ago * PARABOLIC_SPIKE_MULT:
+            spike_mult = current_price / peak_5min_ago
+            return {
+                "action": "emergency",
+                "pct": 0.40,
+                "reason": f"parabolic_spike_{spike_mult:.2f}x",
+            }
+
+    # Signal 4: Volume collapse
+    # Using TVL as volume proxy
+    peak_tvl_recent = position.get("peak_tvl_15min", peak_tvl)
+    if (peak_tvl_recent > 0 and
+        current_tvl < peak_tvl_recent * VOLUME_COLLAPSE_THRESHOLD and
+        time_in_trade_min > 15):
+        return {
+            "action": "emergency",
+            "pct": 1.0,
+            "reason": "volume_collapse",
+        }
+
+    return None
+
+
+def _check_layer1_profit_lock(
+    position: Dict,
+    current_price: float,
+) -> Optional[Dict]:
+    """
+    Check Layer 1 profit lock targets (2x, 3x, 5x).
+    Returns exit signal if a target is hit and not yet exited.
+    """
+    entry_price = position.get("entry_price", 0)
+    if entry_price <= 0:
+        return None
+
+    multiple = current_price / entry_price
+
+    # Track which levels have been exited
+    exited_2x = position.get("dynamic_tp_exited_2x", False)
+    exited_3x = position.get("dynamic_tp_exited_3x", False)
+    exited_5x = position.get("dynamic_tp_exited_5x", False)
+
+    # 5x first (highest priority)
+    if multiple >= 5.0 and not exited_5x:
+        return {
+            "action": "exit",
+            "pct": TP_5X_SELL_PCT,
+            "reason": "5x_profit_lock",
+        }
+
+    # 3x
+    if multiple >= 3.0 and not exited_3x:
+        return {
+            "action": "exit",
+            "pct": TP_3X_SELL_PCT,
+            "reason": "3x_profit_lock",
+        }
+
+    # 2x
+    if multiple >= 2.0 and not exited_2x:
+        return {
+            "action": "exit",
+            "pct": TP_2X_SELL_PCT,
+            "reason": "2x_profit_lock",
+        }
+
+    return None
+
+
+def _check_trailing_stop(
+    position: Dict,
+    current_price: float,
+) -> Optional[Dict]:
+    """
+    Check enhanced trailing stop (30% drawdown from peak).
+    """
+    peak_price = position.get("peak_price", position.get("entry_price", 0))
+
+    if peak_price <= 0:
+        return None
+
+    # Update peak if current is higher
+    if current_price > peak_price:
+        position["peak_price"] = current_price
+        peak_price = current_price
+
+    drawdown = (peak_price - current_price) / peak_price
+
+    if drawdown >= TRAILING_STOP_DRAWDOWN:
+        return {
+            "action": "exit",
+            "pct": 1.0,
+            "reason": f"trailing_stop_{drawdown:.0%}",
+        }
+
+    return None
+
+
+def _check_decision_engine(
+    position: Dict,
+    bot_state: Dict,
+    current_price: float,
+    current_tvl: float,
+    momentum_score: float,
+    momentum_direction: str,
+) -> Optional[Dict]:
+    """
+    Run the decision engine logic.
+    Priority order:
+      1. Danger signal active → emergency exit
+      2. Layer 1 targets hit → scale out
+      3. Momentum strong AND increasing → hold (max 5 cycles)
+      4. Momentum weakening → reduce position
+      5. Time expired (>120 min) AND momentum < 0.8 → exit
+    """
+    symbol = position.get("symbol", "")
+    issuer = position.get("issuer", "")
+    token_key = f"{symbol}:{issuer}"
+    entry_time = position.get("entry_time", time.time())
+    time_in_trade_min = (time.time() - entry_time) / 60
+    cycles_held = position.get("dynamic_tp_cycles_held", 0)
+
+    # Check danger first
+    danger = _check_danger_signals(position, bot_state, current_price, current_tvl)
+    if danger:
+        return danger
+
+    # Check Layer 1 profit lock
+    layer1 = _check_layer1_profit_lock(position, current_price)
+    if layer1:
+        return layer1
+
+    # Momentum-based decisions
+    if momentum_score >= 1.5 and momentum_direction == "increasing":
+        # Strong momentum increasing — hold but cap cycles
+        if cycles_held >= MAX_HOLD_CYCLES_STRONG:
+            return {
+                "action": "exit",
+                "pct": 0.50,
+                "reason": "max_hold_strong_momentum",
+            }
+        return {"action": "hold"}
+
+    if momentum_direction == "decreasing" and momentum_score < 0.8:
+        # Weakening momentum — reduce position
+        return {
+            "action": "exit",
+            "pct": 0.25,
+            "reason": "momentum_weakening",
+        }
+
+    # Time-based exit
+    if time_in_trade_min > TIME_EXPIRED_MIN and momentum_score < 0.8:
+        return {
+            "action": "exit",
+            "pct": 1.0,
+            "reason": "time_expired",
+        }
+
+    return {"action": "hold"}
+
+
+def should_exit(
+    position: Dict,
+    bot_state: Dict,
+    current_price: float,
+    current_tvl: float = 0.0,
+    price_history: List[float] = None,
+    tvl_history: List[float] = None,
+    new_buyers_5min: int = 0,
+    baseline_buyer_rate: float = 1.0,
+    trustlines_added_5min: int = 0,
+) -> Dict:
+    """
+    Main entry point. Determines if a position should exit based on dynamic TP rules.
+
+    Returns:
+      {'action': 'hold'} — no action needed
+      {'action': 'exit', 'pct': float, 'reason': str} — partial or full exit
+      {'action': 'emergency', 'pct': float, 'reason': str} — urgent exit
+
+    Integration: bot.py calls this AFTER scoring, BEFORE sending to execution.
+    If it returns 'hold', existing TP system still applies as fallback.
+    """
+    if price_history is None:
+        price_history = []
+    if tvl_history is None:
+        tvl_history = []
+
+    symbol = position.get("symbol", "")
+    issuer = position.get("issuer", "")
+    token_key = f"{symbol}:{issuer}"
+    entry_price = position.get("entry_price", 0)
+
+    # Increment cycle counter
+    cycles_held = position.get("dynamic_tp_cycles_held", 0) + 1
+    position["dynamic_tp_cycles_held"] = cycles_held
+
+    # Update price history for parabolic spike detection
+    hist_5min = position.get("price_history_5min", [])
+    hist_5min.append(current_price)
+    position["price_history_5min"] = hist_5min[-10:]  # Keep last 10 readings
+
+    # Update peak TVL tracking
+    peak_tvl = position.get("peak_tvl", current_tvl)
+    if current_tvl > peak_tvl:
+        position["peak_tvl"] = current_tvl
+
+    # ── Step 1: Check trailing stop first (always active) ─────────────────────
+    trailing = _check_trailing_stop(position, current_price)
+    if trailing:
+        logger.warning(
+            f"🛑 DYNAMIC-TP {symbol}: {trailing['reason']} — "
+            f"sell {trailing['pct']:.0%}"
+        )
+        return trailing
+
+    # ── Step 2: Compute momentum score ────────────────────────────────────────
+    momentum_score, momentum_direction = _compute_momentum_score(
+        token_key=token_key,
+        price_history=price_history,
+        tvl_history=tvl_history,
+        new_buyers_5min=new_buyers_5min,
+        baseline_buyer_rate=baseline_buyer_rate,
+        trustlines_added_5min=trustlines_added_5min,
+    )
+
+    # ── Step 3: Run decision engine ───────────────────────────────────────────
+    decision = _check_decision_engine(
+        position=position,
+        bot_state=bot_state,
+        current_price=current_price,
+        current_tvl=current_tvl,
+        momentum_score=momentum_score,
+        momentum_direction=momentum_direction,
+    )
+
+    if decision["action"] != "hold":
+        reason = decision.get("reason", "unknown")
+        pct = decision.get("pct", 1.0)
+        action_type = decision["action"]
+        emoji = "🚨" if action_type == "emergency" else "📤"
+        logger.info(
+            f"{emoji} DYNAMIC-TP {symbol}: {reason} — "
+            f"{action_type} {pct:.0%} (momentum={momentum_score:.2f} {momentum_direction})"
+        )
+        return decision
+
+    # ── Step 4: Hold — log momentum state ─────────────────────────────────────
+    logger.debug(
+        f"  DYNAMIC-TP {symbol}: HOLD (momentum={momentum_score:.2f} "
+        f"{momentum_direction}, cycles={cycles_held})"
+    )
+
+    return {"action": "hold"}
+
+
+def mark_profit_lock_exit(position: Dict, reason: str) -> None:
+    """Mark a profit lock level as exited so it won't trigger again."""
+    if "2x" in reason:
+        position["dynamic_tp_exited_2x"] = True
+    elif "3x" in reason:
+        position["dynamic_tp_exited_3x"] = True
+    elif "5x" in reason:
+        position["dynamic_tp_exited_5x"] = True
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+    print("Dynamic TP Module — test mode")
+
+    # Simulate a position
+    test_position = {
+        "symbol": "TEST",
+        "issuer": "rTestIssuer123",
+        "entry_price": 0.001,
+        "peak_price": 0.001,
+        "entry_time": time.time() - 3600,  # 1 hour ago
+        "tokens_held": 10000,
+        "xrp_spent": 10.0,
+    }
+
+    test_bot_state = {"trade_history": [], "positions": {}}
+
+    # Test at various multiples
+    for mult in [1.5, 2.0, 3.0, 5.0, 6.0]:
+        current = test_position["entry_price"] * mult
+        result = should_exit(
+            position=test_position.copy(),
+            bot_state=test_bot_state,
+            current_price=current,
+            current_tvl=5000,
+        )
+        print(f"  {mult}x: {result}")-e 
+
+================================================================================
+=== FILE: config.py (MODIFIED) ===
+160 lines
+================================================================================
+
+"""
+config.py — DKTrenchBot Configuration
+
+DATA-DRIVEN REBUILD 2026-04-06 21:49 UTC
+Based on 53 real trades analysis:
+  - Score 0-49: 47% WR (BEST)
+  - Score 50-59: 50% WR (SOLID)
+  - Score 60-79: 12-22% WR (BAD — mostly stales)
+  - Score 80-100: 0% WR (WORST — all stales, mature pools)
+  - Hour 04-07 UTC: 6-17% WR (DEAD — no activity)
+  - Hour 13-22 UTC: 44-100% WR (PEAK — trade here only)
+  - Stales = 40% of all trades → cut stale timer hard
+  - Winners cluster in low-TVL micro tokens, not established pools
+"""
+
+import os
+from typing import List
+
+# ── Core Infrastructure ────────────────────────────────────────────────────────
+CLIO_URL         = os.environ.get("CLIO_URL", "https://rpc.xrplclaw.com")
+WS_URL           = os.environ.get("WS_URL",   "wss://rpc.xrplclaw.com/ws")
+BOT_WALLET_ADDRESS = "rKQACag8Td9TrMxBwYJPGRMDV8cxGfKsmF"
+STATE_DIR        = os.path.join(os.path.dirname(__file__), "state")
+POLL_INTERVAL_SEC = 60
+
+# ── Score Thresholds ───────────────────────────────────────────────────────────
+# DATA: Score 0-49 = 47% WR, 50-59 = 50% WR, 60-79 = 12-22% WR, 80-100 = 0% WR
+# The scoring system is inversely correlated at high values — high TVL pools
+# score well but are already discovered and don't move.
+# Strategy: accept lower-scoring tokens (real runners), reject high-score stales.
+SCORE_ELITE        = 50    # 50+ → elite size — DATA shows this is the real sweet spot
+SCORE_TRADEABLE    = 42    # 42+ → normal entry
+SCORE_SMALL        = 999   # DISABLED — no small band, use scalp mode instead
+PREFERRED_CHART_STATES = {"pre_breakout"}  # only state with runners — data confirmed
+
+# ── Position Sizing ────────────────────────────────────────────────────────────
+XRP_PER_TRADE_BASE = 8.0    # Normal entry (42-49) — moderate
+XRP_ELITE_BASE     = 12.0   # Elite entry (50+) — confident
+XRP_SMALL_BASE     = 4.0    # Scalp / micro entries
+XRP_SNIPER_BASE    = 5.0    # Sniper entries
+XRP_MICRO_BASE     = 5.0    # Micro-cap new token
+MAX_POSITIONS      = 4      # Max concurrent — keep capital focused
+
+# ── TVL Thresholds ─────────────────────────────────────────────────────────────
+# DATA: Winners cluster in micro TVL (under 3K XRP). Established pools (5K-20K)
+# score high but produce 0% WR. Flip the model.
+MIN_TVL_XRP        = 200    # lower floor — catch the PHX-type early launchers
+TVL_MICRO_CAP_XRP  = 5000   # under 5K XRP TVL = micro sizing (was 2K, too tight)
+MIN_TVL_DROP_EXIT  = 0.40   # exit if TVL drops >40% in one cycle (pool draining)
+
+# ── Exit System — 4-tier TP + Tight Stale ─────────────────────────────────────
+# DATA: Stale exits = 40% of trades, all losses. Cut timer in half.
+STALE_EXIT_HOURS   = 1.5    # was 3hr — halved. If no move in 90 min, it's dead.
+MAX_HOLD_HOURS     = 4.0    # absolute cap (was 6hr)
+
+HARD_STOP_PCT      = 0.15   # -15% hard stop
+HARD_STOP_EARLY_PCT = 0.10  # -10% in first 30 min
+HARD_STOP_GRACE_SEC = 1800  # 30 min early stop window
+
+TRAIL_STOP_PCT     = 0.20   # -20% trailing from peak
+
+# 4-tier TP — let real runners go to 600%+
+TP1_PCT            = 0.20   # +20% → sell 30%
+TP1_SELL_FRAC      = 0.30
+TP2_PCT            = 0.50   # +50% → sell 30% of remainder
+TP2_SELL_FRAC      = 0.30
+TP3_PCT            = 3.00   # +300% → sell 30% of remainder
+TP3_SELL_FRAC      = 0.30
+TP4_PCT            = 6.00   # +600% → full exit
+
+# ── Trading Hours ──────────────────────────────────────────────────────────────
+# DATA: 04-07 UTC = 6-17% WR (dead market). 13-22 UTC = 44-100% WR.
+# Only enter NEW positions during peak hours. Exit management runs 24/7.
+TRADING_HOURS_UTC  = list(range(0, 24))  # 24/7 — operator preference: trade all hours
+
+# ── Scoring Module Flags ───────────────────────────────────────────────────────
+CONTINUATION_MIN_SCORE = 999   # DISABLED — 17% WR avg -1.4 XRP
+ORPHAN_MIN_SCORE       = 999   # DISABLED — 14% WR, rugpull magnet
+
+# ── Scalp Mode ─────────────────────────────────────────────────────────────────
+# Quick 10% target for borderline tokens. Tight stop, time-limited.
+SCALP_MIN_SCORE    = 35     # lowered — data shows 35-41 WR=47% (!)
+SCALP_MAX_SCORE    = 41     # below main threshold
+SCALP_SIZE_XRP     = 4.0    # small position
+SCALP_TP_PCT       = 0.10   # +10% → full exit
+SCALP_STOP_PCT     = 0.08   # -8% → full exit
+SCALP_MAX_HOLD_MIN = 45     # 45 min max
+
+# ── Regime ────────────────────────────────────────────────────────────────────
+REGIME_HOT_THRESHOLD    = 0.55   # WR above this = hot
+REGIME_COLD_THRESHOLD   = 0.35   # WR below this = cold
+REGIME_DANGER_THRESHOLD = 0.20   # WR below this = danger (pause entries)
+
+# ── Reentry / Blacklist ────────────────────────────────────────────────────────
+SKIP_REENTRY_SYMBOLS = {"Teddy", "ZERPS", "JEET", "NOX", "XRPB", "XRPH"}
+COOLDOWN_AFTER_STOP_MIN = 120  # don't re-enter a stopped token for 2 hours
+
+# ── Proven Token System ────────────────────────────────────────────────────────
+# Tokens that have demonstrated TP1+ exits get priority reload on dip recovery.
+# No cooldown applies to proven tokens. Bigger sizing allowed.
+# Updated dynamically from trade_history at runtime.
+PROVEN_TOKEN_MIN_WINS   = 2      # need 2+ TP exits to qualify as proven
+PROVEN_TOKEN_RELOAD_XRP = 15.0   # bigger size for proven tokens (vs 8 base)
+PROVEN_TOKEN_SCORE_GATE = 38     # lower score gate for proven tokens (they've earned trust)
+
+# ── Hold vs Scalp Decision Logic ──────────────────────────────────────────────
+# TVL tier determines strategy: micro = scalp, early-stage = hold for 300%+
+# This is the single biggest lever for catching PHX-type runners vs wasting on stales
+TVL_SCALP_MAX         = 1_000    # under 1K XRP TVL = quick scalp (ghost/unproven)
+TVL_HOLD_MIN          = 1_000    # 1K-10K XRP TVL = hold for big moves
+TVL_HOLD_MAX          = 10_000   # over 10K XRP = stale, skip or micro entry
+TVL_VELOCITY_RUNNER   = 0.20     # TVL growing 20%+ = runner starting, hold mode (unified with inline threshold in bot.py)
+
+# ── Token Registry & Currency Utils ───────────────────────────────────────────
+# Default fallback registry (overridden at runtime by active_registry.json)
+TOKEN_REGISTRY = {}
+
+def get_currency(symbol: str) -> str:
+    """Convert ticker symbol to XRPL currency code."""
+    s = symbol.upper()
+    if len(s) <= 3:
+        return s.ljust(3)
+    # If already a 40-char hex string, return as-is (avoid double-encoding)
+    if len(s) == 40 and all(c in "0123456789ABCDEF" for c in s):
+        return s
+    # Hex-encode to 40-char currency code
+    encoded = s.encode("utf-8").hex().upper()
+    return encoded.ljust(40, "0")[:40]
+
+# ── Safety / Execution Constants ──────────────────────────────────────────────
+MIN_LP_BURN_PCT   = 0.80   # 80%+ LP burned = safe (issuer can't rug liquidity)
+SECRETS_FILE      = os.path.join(os.path.dirname(os.path.dirname(__file__)), "memory", "secrets.md")
+
+# Known XRPL blackhole addresses (issuer sent keys to these = tokens can't be rugged)
+BLACK_HOLES = {
+    "rrrrrrrrrrrrrrrrrrrrrhoLvTp",
+    "rrrrrrrrrrrrrrrrrrrrBZbvji",
+    "rBurnAddress1111111111111111",
+    "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+}
+
+# ── Smart Money / Wallet Intelligence ─────────────────────────────────────────
+WHALE_XRP_THRESHOLD = 10_000   # wallets holding 10K+ XRP equivalent = whale
+
+
+# ── Stablecoin / Non-Meme Skip List (centralized) ─────────────────────────────
+STABLECOIN_SKIP = frozenset({
+    "USD","USDC","USDT","RLUSD","XUSD","AUDD","XSGD","XCHF","GYEN",
+    "EUR","EURO","EUROP","GBP","JPY","CNY","AUD","CAD","MXRP",
+    "SGB","FLR","XAH","BTC","ETH","SOL","XDC","SOLO","CSC","CORE","EVR",
+})
+FIAT_PREFIXES = ("USD","EUR","GBP","JPY","CNY","AUD","CAD","STABLE","PEGGED")
+
+# ── Smart Wallet Tracking ─────────────────────────────────────────────────────
+# Pre-seeded tracked wallets (auto-populated by new_wallet_discovery.py over time)
+TRACKED_WALLETS: List[str] = []
+
+# ── Dynamic TP Module ─────────────────────────────────────────────────────────
+DYNAMIC_TP_ENABLED = True  # Enable 3-layer dynamic take-profit system
+
+-e 
+
+================================================================================
+=== FILE: scoring.py (MODIFIED) ===
+280 lines
+================================================================================
+
+"""
+scoring.py — Composite token score (0-100).
+Components:
+  breakout_quality:   0-25 pts
+  chart_state:        0-20 pts
+  liquidity_depth:    0-15 pts
+  issuer_safety:      0-10 pts
+  route_quality:      0-10 pts
+  smart_money:        0-10 pts
+  extension_penalty: -20-0 pts
+  regime_bonus:      -10-+5 pts
+
+Thresholds: 85+=elite, 70-84=tradeable, 60-69=small_size, <60=skip
+"""
+
+from typing import Dict, Optional
+from config import SCORE_ELITE, SCORE_TRADEABLE, SCORE_SMALL
+
+
+def get_tg_signal_boost(symbol: str) -> int:
+    """Check tg_signals.json for an active social signal boost for this token."""
+    import json, time
+    from pathlib import Path
+    sig_file = Path(__file__).parent / "state" / "tg_signals.json"
+    if not sig_file.exists():
+        return 0
+    try:
+        signals = json.loads(sig_file.read_text())
+        sig = signals.get(symbol.upper())
+        if sig and sig.get("expires", 0) > time.time():
+            return int(sig.get("strength", 0))
+    except Exception:
+        pass
+    return 0
+
+
+def compute_score(
+    breakout_quality:  int   = 0,
+    chart_state:       str   = "dead",
+    chart_confidence:  float = 0.5,
+    tvl_xrp:          float = 0.0,
+    issuer_safe:       bool  = False,
+    issuer_warnings:   int   = 0,
+    route_slippage:    float = 0.05,
+    route_exit_ok:     bool  = True,
+    smart_money_boost: int   = 0,     # 0, 10, or 20
+    extension_pct:     float = 0.0,   # total price move from entry
+    tvl_change_pct:    float = 0.0,   # TVL % change vs last reading (momentum signal)
+    regime:            str   = "neutral",
+    regime_override:   bool  = False,
+    symbol:            str   = "",    # for TG signal lookup
+) -> Dict:
+    """
+    Compute composite score. Returns dict with total and breakdown.
+    """
+    breakdown = {}
+
+    # 1. Breakout quality: 0-35 pts (primary signal — learned 2026-04-03)
+    # Linear up to BQ=60, then bonus acceleration for high conviction
+    if breakout_quality >= 80:
+        bq_pts = 35
+    elif breakout_quality >= 60:
+        bq_pts = 25 + int((breakout_quality - 60) * 0.5)   # 25-35 pts
+    else:
+        bq_pts = int(breakout_quality * 0.42)               # 0-25 pts
+    breakdown["breakout_quality"] = bq_pts
+
+    # 2. Chart state quality: 0-20 pts
+    from chart_intelligence import get_chart_state_score
+    cs_pts = get_chart_state_score(chart_state)
+    # Scale by confidence
+    cs_pts = int(cs_pts * chart_confidence)
+    breakdown["chart_state"] = cs_pts
+
+    # 3. Liquidity depth: 0-30 pts
+    # DATA REBUILD 2026-04-06: Score 80-100 (high TVL, established pools) = 0% WR, all stales.
+    # Winners cluster in MICRO TVL (under 3K XRP) — fresh launches, not discovered yet.
+    # INVERTED from previous: reward fresh/micro, penalise large/established.
+    if 500 <= tvl_xrp < 2_000:
+        liq_pts = 30   # ⭐ sweet spot — fresh launch, not yet discovered
+    elif 200 <= tvl_xrp < 500:
+        liq_pts = 25   # very early, high volatility, PHX-type launch window
+    elif 2_000 <= tvl_xrp < 5_000:
+        liq_pts = 20   # early stage — still moveable
+    elif 5_000 <= tvl_xrp < 15_000:
+        liq_pts = 10   # mid — already partially discovered
+    elif 15_000 <= tvl_xrp < 40_000:
+        liq_pts = 5    # large — slow mover, stale risk
+    elif tvl_xrp >= 40_000:
+        liq_pts = 0    # very large — won't move meaningfully, skip
+    else:
+        liq_pts = 0    # too thin (<200 XRP) — ghost pool
+
+    # TVL momentum bonus: rapidly growing pool = community piling in (+0 to +10 pts)
+    if tvl_change_pct >= 0.50:
+        liq_pts = min(liq_pts + 10, 30)  # TVL up 50%+ — live launch happening
+    elif tvl_change_pct >= 0.25:
+        liq_pts = min(liq_pts + 6, 30)
+    elif tvl_change_pct >= 0.10:
+        liq_pts = min(liq_pts + 3, 30)
+
+    breakdown["liquidity_depth"] = liq_pts
+
+    # 4. Issuer safety: 0-10 pts
+    if issuer_safe:
+        issuer_pts = 10
+    elif issuer_warnings == 0:
+        issuer_pts = 6
+    else:
+        issuer_pts = max(0, 6 - issuer_warnings * 2)
+    breakdown["issuer_safety"] = issuer_pts
+
+    # 5. Route quality: 0-10 pts
+    if route_slippage <= 0.005:
+        route_pts = 10
+    elif route_slippage <= 0.01:
+        route_pts = 8
+    elif route_slippage <= 0.02:
+        route_pts = 5
+    elif route_slippage <= 0.03:
+        route_pts = 2
+    else:
+        route_pts = 0
+    if not route_exit_ok:
+        route_pts = max(0, route_pts - 5)
+    breakdown["route_quality"] = route_pts
+
+    # 6. Smart money: 0-10 pts
+    sm_pts = min(10, smart_money_boost)
+    breakdown["smart_money"] = sm_pts
+
+    # 6b. TG social signal boost: 0-30 pts (from tg_signal_listener.py)
+    tg_boost = get_tg_signal_boost(symbol) if symbol else 0
+    breakdown["tg_signal"] = tg_boost
+
+    # 6c. Wallet Cluster boost (Audit #2): +30 if 2+ smart wallets entering same token
+    cluster_boost = 0
+    try:
+        import wallet_cluster as _wc
+        cluster_boost = _wc.get_cluster_boost(symbol, issuer) if symbol and issuer else 0
+    except Exception:
+        pass
+    breakdown["wallet_cluster"] = cluster_boost
+
+    # 6d. Alpha Recycler boost (Audit #3): +25 if a tracked wallet just recycled into this token
+    recycler_boost = 0
+    try:
+        import alpha_recycler as _ar
+        recycler_boost = _ar.get_alpha_recycler_boost(symbol, issuer) if symbol and issuer else 0
+    except Exception:
+        pass
+    breakdown["alpha_recycler"] = recycler_boost
+
+    # 7. Extension penalty: -20 to 0
+    if extension_pct >= 0.50:
+        ext_penalty = -20
+    elif extension_pct >= 0.35:
+        ext_penalty = -15
+    elif extension_pct >= 0.25:
+        ext_penalty = -10
+    elif extension_pct >= 0.15:
+        ext_penalty = -5
+    else:
+        ext_penalty = 0
+    breakdown["extension_penalty"] = ext_penalty
+
+    # 8. Regime bonus: -10 to +5
+    regime_bonus = {
+        "hot":     5,
+        "neutral": 0,
+        "cold":   -5,
+        "danger": -10,
+    }.get(regime, 0)
+    breakdown["regime_bonus"] = regime_bonus
+
+    total = sum(breakdown.values())
+    total = max(0, min(100, total))
+
+    band = "skip"
+    if total >= SCORE_ELITE:
+        band = "elite"
+    elif total >= SCORE_TRADEABLE:
+        band = "tradeable"
+    elif total >= SCORE_SMALL:
+        band = "small_size"
+
+    return {
+        "total":     total,
+        "band":      band,
+        "breakdown": breakdown,
+    }
+
+
+def position_size(score: int, regime: str, base_xrp: float = 5.0,
+                  elite_xrp: float = 7.5, small_xrp: float = 2.5,
+                  bq: int = 50, wallet_xrp: float = 0.0) -> float:
+    """
+    Score-band primary sizing with BQ and regime multipliers.
+    Kelly was giving negative edge on low BQ tokens — unreliable as primary.
+    Band is the anchor, BQ and regime are modifiers.
+    """
+    if regime == "danger":
+        # Danger doesn't return 0 — half size, stay in the game
+        return max(small_xrp, base_xrp * 0.5)
+
+    regime_mult = {"hot": 1.2, "neutral": 1.0, "cold": 0.85}.get(regime, 1.0)
+
+    # ── Capital-aware sizing ─────────────────────────────────────────────────
+    # Scale base sizes proportionally to available capital.
+    # Target: 8-10% of spendable per hold trade, 3% per scalp.
+    # At 90 XRP spendable: base=9, elite=13.5
+    # At 180 XRP spendable: base=14, elite=20
+    if wallet_xrp > 50:
+        capital_scalar = min(wallet_xrp / 90.0, 1.8)  # cap at 1.8x base
+        base_xrp  = round(base_xrp  * capital_scalar, 1)
+        elite_xrp = round(elite_xrp * capital_scalar, 1)
+        small_xrp = round(small_xrp * capital_scalar, 1)
+
+    # Primary size from score band
+    if score >= SCORE_ELITE:
+        base = elite_xrp
+    elif score >= SCORE_TRADEABLE:
+        base = base_xrp
+    else:
+        base = small_xrp
+
+    # BQ conviction multiplier
+    if bq >= 80:   bq_mult = 1.3
+    elif bq >= 65: bq_mult = 1.15
+    elif bq >= 50: bq_mult = 1.0
+    else:          bq_mult = 0.9
+
+    # Score conviction bonus
+    if score >= SCORE_ELITE:
+        score_mult = min(1.0 + (score - SCORE_ELITE) * 0.01, 1.3)
+    else:
+        score_mult = 1.0
+
+    size = base * regime_mult * bq_mult * score_mult
+
+    # Hard cap: never more than 20% of wallet in one trade
+    if wallet_xrp > 0:
+        size = min(size, wallet_xrp * 0.20)
+
+    # Floor
+    size = max(size, small_xrp)
+
+    return round(size, 2)
+
+
+def size_multiplier(score: int, regime: str) -> float:
+    """Legacy multiplier — kept for compatibility."""
+    if regime == "danger":
+        return 0.0
+    base = {"hot": 1.2, "neutral": 1.0, "cold": 0.5}.get(regime, 1.0)
+    if score >= SCORE_ELITE:
+        return base * 1.5
+    elif score >= SCORE_TRADEABLE:
+        return base * 1.0
+    elif score >= SCORE_SMALL:
+        return base * 0.5
+    else:
+        return 0.0
+
+
+if __name__ == "__main__":
+    result = compute_score(
+        breakout_quality=75,
+        chart_state="pre_breakout",
+        chart_confidence=0.8,
+        tvl_xrp=15000,
+        issuer_safe=True,
+        route_slippage=0.015,
+        route_exit_ok=True,
+        smart_money_boost=10,
+        extension_pct=0.08,
+        regime="neutral",
+    )
+    print(f"Score: {result['total']} ({result['band']})")
+    print(f"Breakdown: {result['breakdown']}")
+-e 
+
+================================================================================
+=== FILE: bot.py (MAIN — key sections) ===
+1571 lines
+================================================================================
+
+"""
+bot.py — Main trading bot loop.
+Start: python3 bot.py
+Stop:  kill the process (or Ctrl+C)
+
+Loop every POLL_INTERVAL_SEC:
+  1. scanner → candidates
+  2. regime check → skip if danger
+  3. safety gate per candidate
+  4. chart_intelligence + scoring
+  5. route_engine check
+  6. execution if score passes
+  7. dynamic_exit checks on all positions
+  8. reconcile every 30 min
+  9. improve every 6 hours
+"""
+
+import os
+import sys
+import json
+import time
+import signal
+import logging
+import traceback
+from typing import Dict, List, Optional
+
+# ── Setup ────────────────────────────────────────────────────────────────────
+os.makedirs(os.path.join(os.path.dirname(__file__), "state"), exist_ok=True)
+
+# Configure logging BEFORE any imports that use logging
+LOG_FILE = os.path.join(os.path.dirname(__file__), "state", "bot.log")
+_root_logger = logging.getLogger()
+if not _root_logger.handlers:
+    logging.basicConfig(
+        level   = logging.INFO,
+        format  = "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        handlers= [
+            logging.FileHandler(LOG_FILE),
+            logging.StreamHandler(sys.stdout),
+        ]
+    )
+else:
+    logging.root.setLevel(logging.INFO)
+logger = logging.getLogger("bot")
+logger.propagate = True  # use root handlers only — prevent duplicate handler attachment
+
+# ── Imports ───────────────────────────────────────────────────────────────────
+from config import (POLL_INTERVAL_SEC, MAX_POSITIONS, SCORE_TRADEABLE,
+                    SCORE_SMALL, SCORE_ELITE, XRP_PER_TRADE_BASE, XRP_SNIPER_BASE, XRP_ELITE_BASE, XRP_SMALL_BASE,
+                    XRP_MICRO_BASE, TVL_MICRO_CAP_XRP,
+                    CONTINUATION_MIN_SCORE, ORPHAN_MIN_SCORE,
+                    PREFERRED_CHART_STATES,
+                    SCALP_MIN_SCORE, SCALP_MAX_SCORE, SCALP_SIZE_XRP,
+                    SCALP_TP_PCT, SCALP_STOP_PCT, SCALP_MAX_HOLD_MIN,
+                    TRADING_HOURS_UTC, COOLDOWN_AFTER_STOP_MIN,
+                    PROVEN_TOKEN_MIN_WINS, PROVEN_TOKEN_RELOAD_XRP, PROVEN_TOKEN_SCORE_GATE,
+                    TVL_SCALP_MAX, TVL_HOLD_MIN, TVL_HOLD_MAX, TVL_VELOCITY_RUNNER,
+                    STATE_DIR, BOT_WALLET_ADDRESS, SKIP_REENTRY_SYMBOLS)
+import state as state_mod
+import scanner
+import safety
+import breakout as breakout_mod
+import chart_intelligence
+import scoring as scoring_mod
+import regime as regime_mod
+import route_engine
+import execution
+import dynamic_exit
+import smart_money
+import learn as learn_mod
+import reconcile as reconcile_mod
+import wallet_hygiene
+import improve as improve_mod
+import report as report_mod
+import sniper as sniper_mod
+
+# ── New Modules (Audit Improvements) ───────────────────────────────────────────
+import new_wallet_discovery as wallet_discovery_mod
+import wallet_cluster as cluster_mod
+import alpha_recycler as recycler_mod
+import dynamic_tp as dynamic_tp_mod
+
+import sys
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "relay"))
+import bridge as relay_bridge
+relay_bridge.set_url("https://together-lawyer-arrivals-bargains.trycloudflare.com")
+
+STATUS_FILE = os.path.join(STATE_DIR, "status.json")
+
+# ── Globals ────────────────────────────────────────────────────────────────────
+_running    = True
+_bot_state  = None
+_cycle_count = 0
+_last_report_day = -1
+
+# ── Signal Handling ────────────────────────────────────────────────────────────
+def _handle_signal(signum, frame):
+    global _running
+    logger.info(f"Signal {signum} received — shutting down...")
+    _running = False
+-e 
+
+... [bot.py is 2,137 lines — showing imports + startup + main loop structure] ...
+
+Key integration points in bot.py:
+- Line ~50: Import new modules (new_wallet_discovery, wallet_cluster, alpha_recycler, dynamic_tp)
+- Line ~276: Startup calls discovery.run_discovery() and cluster.start_monitor()
+- Line ~494: Main cycle loop with trading hours gate
+- Line ~1032: Re-entry logic on pullback
+- Line ~1155: Position management loop with dynamic_tp.should_exit() integration
+- Line ~1375: Trustline cleanup on position close
+
