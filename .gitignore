@@ -1,0 +1,43 @@
+# Secrets and credentials
+secrets.py
+.env
+*.key
+*.pem
+
+# Large log files
+*.log
+bot.log
+dashboard_api.log
+watchdog.log
+tg_listener.log
+tg_scanner.log
+amm_watcher.log
+
+# State files (runtime data)
+state.json
+state/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Archives and exports
+*.tar.gz
+*.zip
+*.txt
+
+# Wrangler / Cloudflare
+.wrangler/
+
+# Dashboard build artifacts
+dashboard/dist/
+dashboard/node_modules/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

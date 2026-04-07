@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DKTrenchBot Command Center</title>
+<style>
+:root{--bg:#080e1a;--panel:#0d1526;--border:#1e2d4a;--text:#e8eeff;--muted:#6b7fa3;--good:#00d4aa;--warn:#f5a623;--bad:#ff4d6d;--accent:#3d9bff;--purple:#7b5ea7}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:13px;line-height:1.5}
+.wrap{max-width:1400px;margin:0 auto;padding:16px 20px}
+h1{font-size:18px;font-weight:700;margin-bottom:12px;color:var(--accent)}
+h2{font-size:14px;font-weight:600;margin-bottom:8px;color:var(--text)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px}
+.stat-card{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:12px 14px}
+.stat-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.stat-value{font-size:20px;font-weight:700;margin-top:2px}
+.stat-value.good{color:var(--good)}.stat-value.bad{color:var(--bad)}
+.section{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px}
+.log-window{height:250px;overflow-y:auto;font-family:'JetBrains Mono',monospace;font-size:11px;line-height:1.5;background:#060b14;border-radius:6px;padding:8px}
+.log-entry{padding:1px 0;border-bottom:1px solid #0d1526}.log-entry.warn{color:var(--warn)}.log-entry.error{color:var(--bad)}.log-entry.info{color:var(--good)}
+.pos-row,.trade-row,.shadow-row{display:flex;justify-content:space-between;padding:5px 8px;border-bottom:1px solid var(--border);font-size:12px}
+.pos-row:last-child,.trade-row:last-child,.shadow-row:last-child{border:none}
+.controls{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.btn{padding:7px 14px;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;color:#fff}
+.btn-start{background:var(--good)}.btn-stop{background:var(--warn)}.btn-kill{background:var(--bad)}.btn-reset{background:var(--accent)}
+.btn:hover{opacity:.85}
+.status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+.status-dot.on{background:var(--good);box-shadow:0 0 6px var(--good)}.status-dot.off{background:var(--bad)}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:900px){.grid-2{grid-template-columns:1fr}}
+.ml-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}
+.ml-logging{background:#1a2744;color:var(--accent)}.ml-active{background:#1a3a2a;color:var(--good)}
+.tab-bar{display:flex;gap:4px;margin-bottom:10px}
+.tab{padding:6px 14px;border:1px solid var(--border);border-radius:6px 6px 0 0;background:var(--panel);cursor:pointer;font-size:12px;color:var(--muted)}
+.tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.tab-content{display:none}.tab-content.active{display:block}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1><span id="statusDot" class="status-dot off"></span>DKTrenchBot Command Center</h1>
+
+<div class="stats">
+<div class="stat-card"><div class="stat-label">Balance</div><div class="stat-value" id="balance">—</div></div>
+<div class="stat-card"><div class="stat-label">PnL</div><div class="stat-value" id="pnl">—</div></div>
+<div class="stat-card"><div class="stat-label">Trades</div><div class="stat-value" id="trades">0</div></div>
+<div class="stat-card"><div class="stat-label">Win Rate</div><div class="stat-value" id="winRate">0%</div></div>
+<div class="stat-card"><div class="stat-label">Uptime</div><div class="stat-value" id="uptime">0s</div></div>
+<div class="stat-card"><div class="stat-label">ML Phase</div><div class="stat-value" id="mlPhase">—</div></div>
+</div>
+
+<div class="grid-2">
+<div class="section">
+<h2>Open Positions (<span id="posCount">0</span>)</h2>
+<div id="positions"><div style="color:var(--muted)">No open positions</div></div>
+</div>
+<div class="section">
+<h2>Shadow ML Trades (<span id="shadowCount">0</span>)</h2>
+<div id="shadowTrades" style="max-height:200px;overflow-y:auto"><div style="color:var(--muted)">No shadow trades</div></div>
+</div>
+</div>
+
+<div class="section">
+<div class="tab-bar">
+<div class="tab active" onclick="showTab('logs')">Live Logs</div>
+<div class="tab" onclick="showTab('ml')">ML Status</div>
+<div class="tab" onclick="showTab('shadow')">Shadow Stats</div>
+</div>
+<div id="tab-logs" class="tab-content active">
+<div class="log-window" id="logs"></div>
+</div>
+<div id="tab-ml" class="tab-content">
+<div id="mlStatus" style="padding:8px"><div style="color:var(--muted)">Loading ML status...</div></div>
+</div>
+<div id="tab-shadow" class="tab-content">
+<div id="shadowStats" style="padding:8px"><div style="color:var(--muted)">Loading shadow stats...</div></div>
+</div>
+</div>
+
+<div class="controls">
+<button class="btn btn-start" onclick="fetch('/start',{method:'POST'})">▶ Start</button>
+<button class="btn btn-stop" onclick="fetch('/stop',{method:'POST'})">⏹ Stop</button>
+<button class="btn btn-kill" onclick="fetch('/kill',{method:'POST'})">☠ Kill</button>
+<button class="btn btn-reset" onclick="fetch('/reset',{method:'POST'}).then(()=>location.reload())">↻ Reset</button>
+</div>
+</div>
+
+<script>
+const API='';
+function fmt(n,d=2){return Number(n).toFixed(d)}
+function fmtTime(s){if(!s||s<0)s=0;if(s<60)return s+'s';if(s<3600)return Math.floor(s/60)+'m '+s%60+'s';return Math.floor(s/3600)+'h '+Math.floor((s%3600)/60)+'m'}
+function showTab(t){document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));document.querySelectorAll('.tab-content').forEach(el=>el.classList.remove('active'));event.target.classList.add('active');document.getElementById('tab-'+t).classList.add('active')}
+
+async function refresh(){
+ try{
+  const stats=await fetch(API+'/stats').then(r=>r.json());
+  const logs=await fetch(API+'/logs?limit=100').then(r=>r.json());
+  const positions=await fetch(API+'/positions').then(r=>r.json());
+
+  document.getElementById('balance').textContent=fmt(stats.balance,2)+' XRP';
+  const pnlEl=document.getElementById('pnl');
+  pnlEl.textContent=(stats.pnl>=0?'+':'')+fmt(stats.pnl,2)+' XRP';
+  pnlEl.className='stat-value '+(stats.pnl>=0?'good':'bad');
+  document.getElementById('trades').textContent=stats.trades;
+  document.getElementById('winRate').textContent=stats.winRate+'%';
+  document.getElementById('uptime').textContent=fmtTime(stats.uptime||0);
+  document.getElementById('posCount').textContent=stats.positions_count;
+  document.getElementById('statusDot').className='status-dot '+(stats.running?'on':'off');
+  if(stats.ml_phase) document.getElementById('mlPhase').innerHTML='<span class="ml-badge '+(stats.ml_phase==='logging'?'ml-logging':'ml-active')+'">'+stats.ml_phase+'</span>';
+
+  // Positions
+  const posDiv=document.getElementById('positions');
+  if(!positions||positions.length===0){posDiv.innerHTML='<div style="color:var(--muted)">No open positions</div>';}
+  else{posDiv.innerHTML=positions.map(p=>`<div class="pos-row"><span>${p.token}</span><span>${p.size_xrp} XRP</span><span>Entry:${p.entry}</span><span>Now:${p.current}</span><span class="${p.pnl_pct>=0?'good':'bad'}">${p.pnl_pct>=0?'+':''}${p.pnl_pct}%</span></div>`).join('');}
+
+  // Logs
+  const logDiv=document.getElementById('logs');
+  logDiv.innerHTML=logs.map(l=>{let c='info';if(l.includes('SKIP')||l.includes('WARN'))c='warn';if(l.includes('ERROR')||(l.includes('CLOSED')&&l.includes('-')))c='error';return `<div class="log-entry ${c}">${l}</div>`;}).join('');
+  logDiv.scrollTop=logDiv.scrollHeight;
+
+  // Shadow trades
+  try{
+   const shadow=await fetch(API+'/shadow_trades').then(r=>r.json());
+   const stDiv=document.getElementById('shadowTrades');
+   document.getElementById('shadowCount').textContent=shadow.total||0;
+   if(!shadow.trades||shadow.trades.length===0){stDiv.innerHTML='<div style="color:var(--muted)">No shadow trades yet</div>';}
+   else{stDiv.innerHTML=shadow.trades.slice(-10).map(t=>`<div class="shadow-row"><span>${t.token}</span><span>score=${t.score}</span><span>${t.size_xrp} XRP</span><span class="${(t.pnl||0)>=0?'good':'bad'}">${t.status} ${t.pnl!=null?(t.pnl>=0?'+':'')+fmt(t.pnl*100,1)+'%':''}</span></div>`).join('');}
+   // Shadow stats tab
+   document.getElementById('shadowStats').innerHTML=`<p>Shadow Win Rate: <b>${shadow.win_rate||0}%</b></p><p>Shadow PnL: <b class="${(shadow.total_pnl||0)>=0?'good':'bad'}">${(shadow.total_pnl||0)>=0?'+':''}${fmt(shadow.total_pnl||0,4)} XRP</b></p><p>Open Paper Positions: <b>${shadow.open||0}</b></p><p>Total Paper Trades: <b>${shadow.total||0}</b></p>`;
+  }catch(e){console.error('Shadow fetch error:',e)}
+
+  // ML status tab
+  try{
+   const ml=await fetch(API+'/ml_status').then(r=>r.json());
+   document.getElementById('mlStatus').innerHTML=`<p>Phase: <b>${ml.phase||'unknown'}</b></p><p>Features Logged: <b>${ml.features_logged||0}</b></p><p>Trades to Model: <b>${Math.max(0,(ml.trades_needed||50)-(ml.trades_current||0))}</b></p><p>Current Trades: <b>${ml.trades_current||0}</b></p>`;
+   document.getElementById('mlPhase').innerHTML='<span class="ml-badge '+(ml.phase==='logging'?'ml-logging':'ml-active')+'">'+(ml.phase||'?')+'</span>';
+  }catch(e){console.error('ML fetch error:',e)}
+ }catch(e){console.error(e)}
+}
+
+refresh();
+setInterval(refresh,2000);
+</script>
+</body>
+</html>

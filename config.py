@@ -1,0 +1,166 @@
+"""
+config.py — DKTrenchBot Configuration
+
+DATA-DRIVEN REBUILD 2026-04-06 21:49 UTC
+Based on 53 real trades analysis:
+  - Score 0-49: 47% WR (BEST)
+  - Score 50-59: 50% WR (SOLID)
+  - Score 60-79: 12-22% WR (BAD — mostly stales)
+  - Score 80-100: 0% WR (WORST — all stales, mature pools)
+  - Hour 04-07 UTC: 6-17% WR (DEAD — no activity)
+  - Hour 13-22 UTC: 44-100% WR (PEAK — trade here only)
+  - Stales = 40% of all trades → cut stale timer hard
+  - Winners cluster in low-TVL micro tokens, not established pools
+"""
+
+import os
+from typing import List
+
+# ── Core Infrastructure ────────────────────────────────────────────────────────
+CLIO_URL         = os.environ.get("CLIO_URL", "https://rpc.xrplclaw.com")
+WS_URL           = os.environ.get("WS_URL",   "wss://rpc.xrplclaw.com/ws")
+BOT_WALLET_ADDRESS = "rKQACag8Td9TrMxBwYJPGRMDV8cxGfKsmF"
+STATE_DIR        = os.path.join(os.path.dirname(__file__), "state")
+POLL_INTERVAL_SEC = 1
+
+# ── Score Thresholds ───────────────────────────────────────────────────────────
+# DATA: Score 0-49 = 47% WR, 50-59 = 50% WR, 60-79 = 12-22% WR, 80-100 = 0% WR
+# The scoring system is inversely correlated at high values — high TVL pools
+# score well but are already discovered and don't move.
+# Strategy: accept lower-scoring tokens (real runners), reject high-score stales.
+SCORE_ELITE        = 50    # 50+ → elite size — DATA shows this is the real sweet spot
+SCORE_TRADEABLE    = 30    # 50+ → normal entry (raised from 42 — improve_loop: 62% of losses scored 50-59)
+SCORE_SMALL        = 999   # DISABLED — no small band, use scalp mode instead
+PREFERRED_CHART_STATES = {"pre_breakout"}  # only state with runners — data confirmed
+
+# ── Position Sizing ────────────────────────────────────────────────────────────
+XRP_PER_TRADE_BASE = 8.0    # Normal entry (42-49) — moderate
+XRP_ELITE_BASE     = 12.0   # Elite entry (50+) — confident
+XRP_SMALL_BASE     = 4.0    # Scalp / micro entries
+XRP_SNIPER_BASE    = 5.0    # Sniper entries
+XRP_MICRO_BASE     = 5.0    # Micro-cap new token
+MAX_POSITIONS = 10   # warden defensive: drawdown alarm
+
+# ── TVL Thresholds ─────────────────────────────────────────────────────────────
+# DATA: Winners cluster in micro TVL (under 3K XRP). Established pools (5K-20K)
+# score high but produce 0% WR. Flip the model.
+MIN_TVL_XRP        = 200    # lower floor — catch the PHX-type early launchers
+TVL_MICRO_CAP_XRP  = 5000   # under 5K XRP TVL = micro sizing (was 2K, too tight)
+MIN_TVL_DROP_EXIT  = 0.40   # exit if TVL drops >40% in one cycle (pool draining)
+
+# ── Exit System — 4-tier TP + Tight Stale ─────────────────────────────────────
+# DATA: Stale exits = 40% of trades, all losses. Cut timer in half.
+STALE_EXIT_HOURS   = 0.97   # improve_loop: 4 stale exits averaged 1.9hr hold, all lost. Recover ~-3.97 XRP by tightening.
+MAX_HOLD_HOURS     = 4.0    # absolute cap (was 6hr)
+
+HARD_STOP_PCT = 15   # warden tightened: loss > win
+HARD_STOP_EARLY_PCT = 0.10  # -10% in first 30 min
+HARD_STOP_GRACE_SEC = 1800  # 30 min early stop window
+
+TRAIL_STOP_PCT     = 0.20   # -20% trailing from peak
+
+# 4-tier TP — let real runners go to 600%+
+TP1_PCT            = 0.20   # +20% → sell 30%
+TP1_SELL_FRAC      = 0.30
+TP2_PCT            = 0.50   # +50% → sell 30% of remainder
+TP2_SELL_FRAC      = 0.30
+TP3_PCT            = 3.00   # +300% → sell 30% of remainder
+TP3_SELL_FRAC      = 0.30
+TP4_PCT            = 6.00   # +600% → full exit
+
+# ── Trading Hours ──────────────────────────────────────────────────────────────
+# DATA: 04-07 UTC = 6-17% WR (dead market). 13-22 UTC = 44-100% WR.
+# Only enter NEW positions during peak hours. Exit management runs 24/7.
+TRADING_HOURS_UTC  = list(range(0, 24))  # 24/7 — operator preference: trade all hours
+
+# ── Scoring Module Flags ───────────────────────────────────────────────────────
+CONTINUATION_MIN_SCORE = 999   # DISABLED — 17% WR avg -1.4 XRP
+ORPHAN_MIN_SCORE       = 999   # DISABLED — 14% WR, rugpull magnet
+
+# ── Scalp Mode ─────────────────────────────────────────────────────────────────
+# Quick 10% target for borderline tokens. Tight stop, time-limited.
+SCALP_MIN_SCORE    = 35     # lowered — data shows 35-41 WR=47% (!)
+SCALP_MAX_SCORE    = 41     # below main threshold
+SCALP_SIZE_XRP     = 4.0    # small position
+SCALP_TP_PCT       = 0.10   # +10% → full exit
+SCALP_STOP_PCT     = 0.08   # -8% → full exit
+SCALP_MAX_HOLD_MIN = 45     # 45 min max
+
+# ── Regime ────────────────────────────────────────────────────────────────────
+REGIME_HOT_THRESHOLD    = 0.55   # WR above this = hot
+REGIME_COLD_THRESHOLD   = 0.35   # WR below this = cold
+REGIME_DANGER_THRESHOLD = 0.20   # WR below this = danger (pause entries)
+
+# ── Reentry / Blacklist ────────────────────────────────────────────────────────
+SKIP_REENTRY_SYMBOLS = {"Teddy", "ZERPS", "JEET", "NOX", "XRPB", "XRPH"}
+COOLDOWN_AFTER_STOP_MIN = 120  # don't re-enter a stopped token for 2 hours
+
+# ── Proven Token System ────────────────────────────────────────────────────────
+# Tokens that have demonstrated TP1+ exits get priority reload on dip recovery.
+# No cooldown applies to proven tokens. Bigger sizing allowed.
+# Updated dynamically from trade_history at runtime.
+PROVEN_TOKEN_MIN_WINS   = 2      # need 2+ TP exits to qualify as proven
+PROVEN_TOKEN_RELOAD_XRP = 15.0   # bigger size for proven tokens (vs 8 base)
+PROVEN_TOKEN_SCORE_GATE = 38     # lower score gate for proven tokens (they've earned trust)
+
+# ── Hold vs Scalp Decision Logic ──────────────────────────────────────────────
+# TVL tier determines strategy: micro = scalp, early-stage = hold for 300%+
+# This is the single biggest lever for catching PHX-type runners vs wasting on stales
+TVL_SCALP_MAX         = 1_000    # under 1K XRP TVL = quick scalp (ghost/unproven)
+TVL_HOLD_MIN          = 1_000    # 1K-10K XRP TVL = hold for big moves
+TVL_HOLD_MAX          = 10_000   # over 10K XRP = stale, skip or micro entry
+TVL_VELOCITY_RUNNER   = 0.20     # TVL growing 20%+ = runner starting, hold mode (unified with inline threshold in bot.py)
+
+# ── Token Registry & Currency Utils ───────────────────────────────────────────
+# Default fallback registry (overridden at runtime by active_registry.json)
+TOKEN_REGISTRY = {}
+
+def get_currency(symbol: str) -> str:
+    """Convert ticker symbol to XRPL currency code."""
+    s = symbol.upper()
+    if len(s) <= 3:
+        return s.ljust(3)
+    # If already a 40-char hex string, return as-is (avoid double-encoding)
+    if len(s) == 40 and all(c in "0123456789ABCDEF" for c in s):
+        return s
+    # Hex-encode to 40-char currency code
+    encoded = s.encode("utf-8").hex().upper()
+    return encoded.ljust(40, "0")[:40]
+
+# ── Safety / Execution Constants ──────────────────────────────────────────────
+MIN_LP_BURN_PCT   = 0.80   # 80%+ LP burned = safe (issuer can't rug liquidity)
+SECRETS_FILE      = os.path.join(os.path.dirname(os.path.dirname(__file__)), "memory", "secrets.md")
+
+# Known XRPL blackhole addresses (issuer sent keys to these = tokens can't be rugged)
+BLACK_HOLES = {
+    "rrrrrrrrrrrrrrrrrrrrrhoLvTp",
+    "rrrrrrrrrrrrrrrrrrrrBZbvji",
+    "rBurnAddress1111111111111111",
+    "rHb9CJAWyB4rj91VRWn96DkukG4bwdtyTh",
+}
+
+# ── Smart Money / Wallet Intelligence ─────────────────────────────────────────
+WHALE_XRP_THRESHOLD = 10_000   # wallets holding 10K+ XRP equivalent = whale
+
+
+# ── Stablecoin / Non-Meme Skip List (centralized) ─────────────────────────────
+STABLECOIN_SKIP = frozenset({
+    "USD","USDC","USDT","RLUSD","XUSD","AUDD","XSGD","XCHF","GYEN",
+    "EUR","EURO","EUROP","GBP","JPY","CNY","AUD","CAD","MXRP",
+    "SGB","FLR","XAH","BTC","ETH","SOL","XDC","SOLO","CSC","CORE","EVR",
+})
+FIAT_PREFIXES = ("USD","EUR","GBP","JPY","CNY","AUD","CAD","STABLE","PEGGED")
+
+# ── Smart Wallet Tracking ─────────────────────────────────────────────────────
+# Pre-seeded tracked wallets (auto-populated by new_wallet_discovery.py over time)
+TRACKED_WALLETS: List[str] = []
+
+# ── Dynamic TP Module ─────────────────────────────────────────────────────────
+DYNAMIC_TP_ENABLED = True  # Enable 3-layer dynamic take-profit system
+
+# ── Confidence-Based Position Sizing ─────────────────────────────────────────
+MAX_POSITION_XRP = 40.0  # Hard ceiling for any single position
+
+# ── ML Pipeline ───────────────────────────────────────────────────────────────
+ML_ENABLED = True  # Enable ML feature logging and (when ready) predictions
+
