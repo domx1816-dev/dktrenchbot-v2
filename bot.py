@@ -106,6 +106,8 @@ import scoring as scoring_mod
 import regime as regime_mod
 import route_engine
 import execution
+import execution_core
+from execution_core import execute_trade
 import dynamic_exit
 import smart_money
 import learn as learn_mod
@@ -1292,19 +1294,59 @@ def run_cycle(bot_state: Dict) -> Dict:
                 logger.debug(f"Confirmation gate error {symbol}: {_cge}")
 
             # ── 5-6. Execute entry ────────────────────────────────────────────
-            try:
-                logger.info(f"BUY {symbol}: {final_size:.2f} XRP @ {price:.8f} score={total_score}")
+            # ── Execution Core path (GodMode-authorized) ──────────────────────
+            # Fast-path tokens (BURST, CLOB_LAUNCH) use centralized execute_trade
+            # with confidence gate, strategy ownership, liquidity-capped sizing, split entry.
+            _exec_result    = None
+            _using_core     = False
+            _strategy_obj   = _gm_result.get("strategy") if "_gm_result" in dir() else None
+            _use_gm_path    = (
+                "_gm_result" in dir()
+                and _gm_result.get("action") == "enter"
+                and _gm_result.get("strategy") is not None
+            )
 
-                exec_result = execution.buy_token(
-                    symbol         = symbol,
-                    issuer         = issuer,
-                    xrp_amount     = final_size,
-                    expected_price = price,
-                )
+            try:
+                if _use_gm_path:
+                    _classification = _gm_result.get("classification", {})
+                    _wallet_st     = {"balance": cycle_wallet_xrp, "drawdown": _drawdown_pct}
+                    _exec_result   = execute_trade(
+                        token = {
+                            "symbol":        symbol,
+                            "issuer":        issuer,
+                            "price":         price,
+                            "liquidity_usd": candidate.get("liquidity_usd", 0),
+                            "market_cap":    candidate.get("market_cap", 0),
+                        },
+                        classification = _classification,
+                        strategy       = _gm_result["strategy"],
+                        wallet_state   = _wallet_st,
+                        route_quality  = route.get("quality", "GOOD"),
+                        side           = "buy",
+                    )
+                    _using_core = True
+                    logger.info(f"  🚀 EXEC_CORE {symbol}: core path size="
+                                f"{_exec_result.get('size', final_size):.2f} XRP "
+                                f"split={_exec_result.get('split', False)}")
+                else:
+                    # Legacy fallback — old score-threshold flow
+                    logger.info(f"BUY {symbol}: {final_size:.2f} XRP @ {price:.8f} score={total_score}")
+                    _exec_result = execution.buy_token(
+                        symbol         = symbol,
+                        issuer         = issuer,
+                        xrp_amount     = final_size,
+                        expected_price = price,
+                    )
+                    _exec_result = {"first": _exec_result, "split": False}
+
+                # Unpack result for post-execution logic
+                exec_result      = _exec_result["first"]
+                split_executed   = _exec_result.get("split", False)
+                split_total_size = _exec_result.get("size", final_size)
 
                 if exec_result.get("success"):
                     tokens_received = exec_result.get("tokens_received", 0)
-                    actual_price    = exec_result.get("actual_price", price)
+                    actual_price   = exec_result.get("actual_price", price)
                     actual_slippage = exec_result.get("slippage", 0)
 
                     # Guard: don't record a position if we received 0 tokens (ghost position prevention)
