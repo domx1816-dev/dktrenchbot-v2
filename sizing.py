@@ -65,6 +65,16 @@ def calculate_position_size(score: int, wallet_balance: float, confidence_inputs
     if confidence_inputs.get("alpha_signal_active", False):
         multiplier += 0.15
 
+    # TrustSet burst signal — explosive early launch, max aggression
+    if confidence_inputs.get("ts_burst_active", False):
+        ts_count = int(confidence_inputs.get("ts_burst_count", 0))
+        if ts_count >= 50:
+            multiplier += 0.50   # PHX-level burst — all in
+        elif ts_count >= 25:
+            multiplier += 0.35   # strong burst
+        elif ts_count >= 8:
+            multiplier += 0.20   # early burst signal
+
     ml_prob = float(confidence_inputs.get("ml_probability", 0.5))
     if ml_prob >= 0.75:
         multiplier += 0.15
@@ -87,7 +97,35 @@ def calculate_position_size(score: int, wallet_balance: float, confidence_inputs
 
     # ── 3. Liquidity factor (TVL-based, 0.5–1.5) ─────────────────────────────
     tvl = float(confidence_inputs.get("tvl_xrp", 2000))
-    liquidity_factor = max(0.5, min(1.5, tvl / 2000.0))
+
+    # TrustSet burst entries: size is slippage-constrained by TVL.
+    # A thin pool (50-200 XRP) will move 20-40% against you if you throw 20+ XRP in.
+    # Cap aggressively on micro pools, open up once pool can absorb the position.
+    if confidence_inputs.get("ts_burst_active", False):
+        if tvl < 200:
+            # Ghost-thin pool — toe in only, 7 XRP max regardless of score
+            liquidity_factor = 0.0   # overridden below by hard cap
+            raw_size = 7.0
+            final_size = max(MIN_POSITION_XRP, min(7.0, raw_size))
+            logger.info(
+                f"sizing: BURST micro-pool TVL={tvl:.0f} XRP → hard cap 7 XRP (slippage protection)"
+            )
+            return round(final_size, 2)
+        elif tvl < 500:
+            # Sub-$1000 MC zone — scale 7–15 XRP proportionally to TVL
+            # At TVL=200 → 7 XRP, at TVL=500 → 15 XRP
+            capped_size = 7.0 + (tvl - 200) / 300 * 8.0   # linear 7→15 over 200-500 XRP TVL
+            raw_size = base_xrp * multiplier
+            final_size = max(MIN_POSITION_XRP, min(capped_size, raw_size))
+            logger.info(
+                f"sizing: BURST thin-pool TVL={tvl:.0f} XRP → slippage cap {capped_size:.1f} XRP → {final_size:.1f} XRP"
+            )
+            return round(final_size, 2)
+        else:
+            # TVL ≥ 500 XRP — pool can absorb it, 1.0x flat
+            liquidity_factor = 1.0
+    else:
+        liquidity_factor = max(0.5, min(1.5, tvl / 2000.0))
 
     # ── 4. Final size with safety caps ────────────────────────────────────────
     raw_size = base_xrp * multiplier * liquidity_factor

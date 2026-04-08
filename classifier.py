@@ -140,29 +140,32 @@ class Classifier:
             if token.meta.get("burst_count", 0) >= 5:
                 return TokenType.CLOB_LAUNCH
 
-        # ── BURST: velocity > 2.5 (fast mover) AND vol > 50K XRP
-        # Pattern: PHX-type launches — sudden TrustSet burst, community piling in fast
-        # Velocity proxy: burst_count/5min (3+ burst = momentum forming)
-        if token.velocity > 2.5 and token.volume > 50_000:
+        # ── BURST: TrustSet velocity burst OR fast price momentum
+        # Primary signal: burst_count >= 8 TrustSets/hr (calibrated Apr 8)
+        # Secondary: high price velocity on any TVL pool
+        # PHX (137 TS/hr), PHASER (70 TS/hr), DKLEDGER (11 TS/hr at $400 MC)
+        burst_count = token.meta.get("burst_count", 0) or token.meta.get("ts_burst_count", 0)
+        if burst_count >= 8:
             return TokenType.BURST
-        # Also catch via explicit burst_count field
-        if token.meta.get("burst_count", 0) >= 10 and token.volume > 20_000:
+        if token.velocity > 2.5 and token.tvl > 200:
+            return TokenType.BURST
+        # Realtime burst flag set by trustset_watcher or realtime_watcher
+        if token.meta.get("_burst_mode", False):
             return TokenType.BURST
 
-        # ── PRE_BREAKOUT: TVL > 100K, low velocity (accumulation)
-        # Pattern: pool building quietly, smart money accumulating pre-move
-        if token.tvl > 100_000 and token.velocity < 1.2:
+        # ── PRE_BREAKOUT: any TVL, low velocity, chart_state confirmed
+        # Widened from TVL>100K — micro pools coil before massive moves too
+        if token.meta.get("chart_state") == "pre_breakout" and token.velocity < 1.5:
+            return TokenType.PRE_BREAKOUT
+        if token.tvl > 50_000 and token.velocity < 1.2:
             return TokenType.PRE_BREAKOUT
 
-        # ── TREND: TVL > 300K, rising velocity (established momentum)
-        # Pattern: already discovered, still trending with large pool
-        if token.tvl > 300_000 and token.velocity > 1.5:
+        # ── TREND: established momentum, pool already large
+        if token.tvl > 200_000 and token.velocity > 1.5:
             return TokenType.TREND
 
-        # ── MICRO_SCALP: thin vol, high velocity (micro-cap scalp)
-        # Pattern: tiny pools, fast momentum, quick 10-15% scalp then exit
-        # Only if TVL is micro (under 2K XRP) — avoid fat-finger on large pools
-        if token.volume < 25_000 and token.velocity > 1.8 and token.tvl < 2_000:
+        # ── MICRO_SCALP: thin micro pool, fast momentum, quick flip
+        if token.tvl < 2_000 and token.tvl >= 200 and token.velocity > 1.5:
             return TokenType.MICRO_SCALP
 
         return TokenType.NONE

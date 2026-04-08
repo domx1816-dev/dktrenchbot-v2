@@ -20,8 +20,8 @@ CLIO = os.environ.get("CLIO_URL", "https://rpc.xrplclaw.com")
 STATE_FILE = os.path.join(os.path.dirname(__file__), "state", "trustset_watchlist.json")
 
 # Signal thresholds
-MIN_TRUSTSETS_1H  = 15     # min TrustSets in last hour to flag
-MIN_TRUSTSETS_ABS = 25     # min total TrustSets on the token
+MIN_TRUSTSETS_1H  = 8      # min TrustSets in last hour to flag (was 15 — lowered to catch DKLEDGER-type early launches)
+MIN_TRUSTSETS_ABS = 15     # min total TrustSets on the token (was 25)
 MAX_AMM_AGE_H     = 24     # only watch tokens launched in last 24h
 MAX_SEED_XRP      = 1000   # seed XRP < this = micro-launch (PHX was 51)
 MAX_ENTRY_TVL     = 3000   # don't enter if TVL already > 3000 XRP (missed it)

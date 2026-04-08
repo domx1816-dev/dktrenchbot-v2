@@ -218,48 +218,98 @@ def _check_danger_signals(
     return None
 
 
+def _get_strategy_exits(position: Dict) -> Dict:
+    """
+    Returns per-strategy TP targets and hard stop from GodMode classifier.
+    Falls back to config defaults if no strategy stored on position.
+
+    Strategy TP format: list of (multiple, sell_fraction) tuples
+    e.g. [(2.0, 0.50), (3.0, 0.20), (5.0, 0.15), (7.0, 1.0)]
+    """
+    # Read strategy type stored at entry time by classifier.py
+    strategy = position.get("_godmode_type", "unknown")
+
+    STRATEGIES = {
+        # BURST — fast momentum. Take profits quickly, trail tight.
+        # PHX/PHASER type. Goal: lock 50% at 2x, ride remainder to 3x, trail stop.
+        "burst": {
+            "tps": [(2.0, 0.50), (3.0, 0.30), (6.0, 1.0)],
+            "trail_stop": 0.20,   # tight — burst can reverse fast
+            "hard_stop":  0.10,
+            "stale_hours": 1.0,   # cut fast if not moving
+        },
+        # CLOB_LAUNCH — orderbook-driven fresh listing. Very fast, high risk.
+        # Goal: quick 40% then trail. Dump full if momentum dies.
+        "clob_launch": {
+            "tps": [(1.4, 0.40), (2.0, 0.30), (3.0, 1.0)],
+            "trail_stop": 0.15,   # tightest trail — CLOB dumps dump HARD
+            "hard_stop":  0.08,
+            "stale_hours": 0.5,
+        },
+        # PRE_BREAKOUT — coiled spring, hold for the big move.
+        # DKLEDGER-type. Goal: let it breathe, target 5–10x.
+        "pre_breakout": {
+            "tps": [(1.3, 0.20), (2.0, 0.20), (5.0, 0.30), (10.0, 1.0)],
+            "trail_stop": 0.25,   # wider — needs room to develop
+            "hard_stop":  0.12,
+            "stale_hours": 3.0,
+        },
+        # TREND — established momentum, already running.
+        # Ride it but don't overstay.
+        "trend": {
+            "tps": [(1.2, 0.20), (1.5, 0.20), (2.0, 0.30), (4.0, 1.0)],
+            "trail_stop": 0.18,
+            "hard_stop":  0.08,
+            "stale_hours": 2.0,
+        },
+        # MICRO_SCALP — tiny pool, quick flip.
+        # 10–20% and out. Tight everything.
+        "micro_scalp": {
+            "tps": [(1.10, 0.60), (1.20, 1.0)],
+            "trail_stop": 0.08,
+            "hard_stop":  0.06,
+            "stale_hours": 0.75,
+        },
+    }
+
+    # Default (no strategy classified or unknown)
+    DEFAULT = {
+        "tps": [(1.20, 0.30), (1.50, 0.30), (3.00, 0.30), (6.00, 1.0)],
+        "trail_stop": 0.20,
+        "hard_stop":  0.15,
+        "stale_hours": 2.0,
+    }
+
+    return STRATEGIES.get(strategy, DEFAULT)
+
+
 def _check_layer1_profit_lock(
     position: Dict,
     current_price: float,
 ) -> Optional[Dict]:
     """
-    Check Layer 1 profit lock targets (2x, 3x, 5x).
-    Returns exit signal if a target is hit and not yet exited.
+    Check Layer 1 profit lock targets — reads per-strategy TP levels.
+    Each strategy has its own TP ladder stored at entry via _godmode_type.
     """
     entry_price = position.get("entry_price", 0)
     if entry_price <= 0:
         return None
 
     multiple = current_price / entry_price
+    exits = _get_strategy_exits(position)
+    tps = exits["tps"]  # list of (multiple, sell_fraction)
 
-    # Track which levels have been exited
-    exited_2x = position.get("dynamic_tp_exited_2x", False)
-    exited_3x = position.get("dynamic_tp_exited_3x", False)
-    exited_5x = position.get("dynamic_tp_exited_5x", False)
-
-    # 5x first (highest priority)
-    if multiple >= 5.0 and not exited_5x:
-        return {
-            "action": "exit",
-            "pct": TP_5X_SELL_PCT,
-            "reason": "5x_profit_lock",
-        }
-
-    # 3x
-    if multiple >= 3.0 and not exited_3x:
-        return {
-            "action": "exit",
-            "pct": TP_3X_SELL_PCT,
-            "reason": "3x_profit_lock",
-        }
-
-    # 2x
-    if multiple >= 2.0 and not exited_2x:
-        return {
-            "action": "exit",
-            "pct": TP_2X_SELL_PCT,
-            "reason": "2x_profit_lock",
-        }
+    for i, (tp_mult, sell_frac) in enumerate(tps):
+        flag = f"dynamic_tp_exited_tp{i}"
+        if multiple >= tp_mult and not position.get(flag, False):
+            action = "exit" if i < len(tps) - 1 else "exit"  # full exit on last TP
+            return {
+                "action": action,
+                "pct": sell_frac,
+                "reason": f"tp{i+1}_{tp_mult}x_profit_lock",
+                "_tp_flag": flag,
+                "_strategy": position.get("_godmode_type", "default"),
+            }
 
     return None
 
@@ -269,25 +319,43 @@ def _check_trailing_stop(
     current_price: float,
 ) -> Optional[Dict]:
     """
-    Check enhanced trailing stop (30% drawdown from peak).
+    Strategy-aware trailing stop.
+    Each strategy has its own trail and hard stop pct from _get_strategy_exits().
     """
-    peak_price = position.get("peak_price", position.get("entry_price", 0))
+    exits = _get_strategy_exits(position)
+    trail_pct = exits["trail_stop"]
+    hard_stop_pct = exits["hard_stop"]
 
-    if peak_price <= 0:
+    entry_price = position.get("entry_price", 0)
+    peak_price  = position.get("peak_price", entry_price)
+
+    if peak_price <= 0 or entry_price <= 0:
         return None
 
-    # Update peak if current is higher
+    # Update peak
     if current_price > peak_price:
         position["peak_price"] = current_price
         peak_price = current_price
 
-    drawdown = (peak_price - current_price) / peak_price
+    drawdown_from_peak  = (peak_price - current_price) / peak_price
+    drawdown_from_entry = (entry_price - current_price) / entry_price
 
-    if drawdown >= TRAILING_STOP_DRAWDOWN:
+    strategy = position.get("_godmode_type", "default")
+
+    # Hard stop from entry (catches early dumps before peak is established)
+    if drawdown_from_entry >= hard_stop_pct:
         return {
             "action": "exit",
             "pct": 1.0,
-            "reason": f"trailing_stop_{drawdown:.0%}",
+            "reason": f"hard_stop_{drawdown_from_entry:.0%}_{strategy}",
+        }
+
+    # Trailing stop from peak
+    if drawdown_from_peak >= trail_pct:
+        return {
+            "action": "exit",
+            "pct": 1.0,
+            "reason": f"trail_stop_{drawdown_from_peak:.0%}_{strategy}",
         }
 
     return None
@@ -452,8 +520,13 @@ def should_exit(
     return {"action": "hold"}
 
 
-def mark_profit_lock_exit(position: Dict, reason: str) -> None:
+def mark_profit_lock_exit(position: Dict, reason: str, tp_flag: str = None) -> None:
     """Mark a profit lock level as exited so it won't trigger again."""
+    # New flag-based system (strategy-aware)
+    if tp_flag:
+        position[tp_flag] = True
+        return
+    # Legacy fallback
     if "2x" in reason:
         position["dynamic_tp_exited_2x"] = True
     elif "3x" in reason:

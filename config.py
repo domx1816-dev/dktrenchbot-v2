@@ -39,7 +39,7 @@ XRP_ELITE_BASE     = 12.0   # Elite entry (50+) — confident
 XRP_SMALL_BASE     = 4.0    # Scalp / micro entries
 XRP_SNIPER_BASE    = 5.0    # Sniper entries
 XRP_MICRO_BASE     = 5.0    # Micro-cap new token
-MAX_POSITIONS = 10   # GodMode rebuild: 10 concurrent positions to capture more runners
+MAX_POSITIONS = 999  # no limit - master build in full release mode
 
 # ── TVL Thresholds ─────────────────────────────────────────────────────────────
 # DATA: Winners cluster in micro TVL (under 3K XRP). Established pools (5K-20K)

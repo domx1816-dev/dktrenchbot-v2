@@ -26,7 +26,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Optional
 
-from warden_security_patch import send_telegram_message, rpc_call
+from warden_security_patch import rpc_call
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 BOT_DIR    = Path(__file__).parent
@@ -53,25 +53,13 @@ logging.basicConfig(
 log = logging.getLogger("amm_watcher")
 
 
-def send_tg(msg: str):
-    try:
-        hot = load_hot_launches()
-        chat_id = hot.get("tg_chat_id")
-        if not chat_id:
-            log.warning("No tg_chat_id set —TG notification skipped.")
-            return
-        send_telegram_message(msg, str(chat_id))
-    except Exception as e:
-        log.warning(f"TG send error: {e}")
-
-
 def load_hot_launches() -> dict:
     try:
         if HOT_FILE.exists():
             return json.loads(HOT_FILE.read_text())
     except:
         pass
-    return {"launches": {}, "tg_chat_id": None}
+    return {"launches": {}}
 
 
 def save_hot_launches(data: dict):
@@ -231,8 +219,7 @@ def notify_if_strong(token_data: dict):
         f"Signals: `{flag_str}`\n"
         f"_Bot will auto-scan next cycle_"
     )
-    send_tg(msg)
-    log.info(f"TG alert sent for {sym} (DNA={score})")
+    log.info(f"Launch alert logged for {sym} (DNA={score})")
 
 
 async def watch_ledger():

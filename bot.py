@@ -101,6 +101,7 @@ import scanner
 import safety
 import breakout as breakout_mod
 import chart_intelligence
+import pre_move_detector
 import scoring as scoring_mod
 import regime as regime_mod
 import route_engine
@@ -296,8 +297,9 @@ def run_cycle(bot_state: Dict) -> Dict:
         except Exception as _e:
             logger.debug(f"Hot token scan error: {_e}")
 
-    # ── 0c. TrustSet velocity scan (every 4th cycle) — PHX-type launch detector
-    if _cycle_count % 4 == 1:
+    # ── 0c. TrustSet velocity scan (EVERY cycle) — PHX-type launch detector
+    # Changed from every 4th cycle → every cycle for fastest possible burst detection
+    if _cycle_count % 1 == 0:
         try:
             import trustset_watcher as _tsw
             _active_reg = {}
@@ -453,7 +455,46 @@ def run_cycle(bot_state: Dict) -> Dict:
         candidates = []
         scan_results = {}
 
-    # ── 1b. Inject TrustSet velocity signals (PHX-type launches) ─────────────
+    # ── 1b. Pre-Move Detector — catch accumulation phase before explosive move ─
+    # Scans token TVL/MC window ($400-$5k), LP supply, TS rate.
+    # Injects pre_accumulation entries at 5 XRP size (fast, small, pre-explosion).
+    try:
+        _pm_result = pre_move_detector.inject_to_bot()
+        _pm_file = os.path.join(os.path.dirname(__file__), "state", "pre_move_signals.json")
+        if os.path.exists(_pm_file):
+            with open(_pm_file) as _pmf:
+                _pm_data = json.load(_pmf)
+            _pm_age = time.time() - _pm_data.get("ts", 0)
+            if _pm_age < 300:  # only use signals < 5 min old
+                for _sig in _pm_data.get("signals", []):
+                    _pm_key = f"{_sig.get('currency','')}:{_sig.get('addr','')}"
+                    if _pm_key in bot_state.get("positions", {}):
+                        continue
+                    if any(c.get("key") == _pm_key for c in candidates):
+                        continue
+                    _pm_cand = {
+                        "symbol":    _sig.get("symbol", ""),
+                        "currency":  _sig.get("currency", ""),
+                        "issuer":    _sig.get("addr", ""),
+                        "key":       _pm_key,
+                        "tvl":       _sig.get("tvl", 1000),
+                        "price":     _sig.get("price", 0),
+                        "score":     70,  # moderate score — let classifier decide routing
+                        "burst_count": 5,  # light burst = early stage, not mid-move
+                        "_pre_move": True,
+                        "_pre_move_signal": _sig.get("signal", "pre_accumulation"),
+                        "_pre_move_conf": _sig.get("confidence", 80),
+                        "_pre_move_reason": _sig.get("reason", ""),
+                        "_pre_move_size": _sig.get("size_xrp", 5.0),
+                    }
+                    candidates.append(_pm_cand)
+                    logger.info(f"📡 PRE-MOVE INJECT: {_sig.get('symbol','')} | {_sig.get('reason','')}")
+        else:
+            logger.debug("Pre-move scan: no signals ready")
+    except Exception as _e:
+        logger.debug(f"Pre-move detector error: {_e}")
+
+    # ── 1c. Inject TrustSet velocity signals (PHX-type launches) ─────────────
     try:
         import json as _json3
         _ts_path = os.path.join(os.path.dirname(__file__), "state", "trustset_signals.json")
@@ -731,8 +772,14 @@ def run_cycle(bot_state: Dict) -> Dict:
                 sm_result = smart_money.check_smart_money_signal(symbol, issuer)
                 sm_boost  = sm_result.get("boost", 0)
 
-                # Calculate position size
-                xrp_size = XRP_PER_TRADE_BASE * size_mult_global * adj.get("size_mult", 1.0)
+                # Pre-move override: use detector's small sizing for early entries
+                # Fast entry = 3-5 XRP, not full sizing — we enter BEFORE the move
+                _pre_size = candidate.get("_pre_move_size", 0)
+                if _pre_size > 0:
+                    xrp_size = _pre_size
+                    logger.info(f"  📡 {symbol}: pre-move size override → {_pre_size:.1f} XRP ({candidate.get('_pre_move_signal','?')})")
+                else:
+                    xrp_size = XRP_PER_TRADE_BASE * size_mult_global * adj.get("size_mult", 1.0)
 
                 # Route check
                 route = route_engine.evaluate_route(symbol, issuer, amm, xrp_size)
@@ -756,20 +803,6 @@ def run_cycle(bot_state: Dict) -> Dict:
                     except Exception as _e:
                         logger.debug(f"DNA score error: {_e}")
 
-                # TG scanner signal boost (from tg_scanner_listener.py)
-                tg_scanner_boost = 0
-                try:
-                    _sc_file = os.path.join(STATE_DIR, "tg_scanner_signals.json")
-                    if os.path.exists(_sc_file):
-                        _sc_sigs = json.loads(open(_sc_file).read())
-                        _sc = _sc_sigs.get(symbol.upper(), {})
-                        if _sc and _sc.get("expires", 0) > time.time():
-                            tg_scanner_boost = int(_sc.get("boost", 0))
-                            if tg_scanner_boost > 0:
-                                logger.info(f"  {symbol}: TG scanner boost +{tg_scanner_boost}pts (holders={_sc.get('holders')} tvl={_sc.get('tvl_xrp')})")
-                except Exception as _tge:
-                    logger.debug(f"TG scanner read error: {_tge}")
-
                 # Hot launch signal boost (from amm_launch_watcher.py)
                 hot_launch_boost = 0
                 try:
@@ -786,7 +819,7 @@ def run_cycle(bot_state: Dict) -> Dict:
                     logger.debug(f"Hot launch read error: {_hle}")
 
                 # Merge all boosts — DNA + TG scanner + hot launch
-                sm_boost_total = min(sm_boost + dna_bonus + tg_scanner_boost + hot_launch_boost, 60)
+                sm_boost_total = min(sm_boost + dna_bonus + hot_launch_boost, 60)
 
                 # Score
                 score_result = scoring_mod.compute_score(
@@ -822,25 +855,66 @@ def run_cycle(bot_state: Dict) -> Dict:
                     _gm_reason  = _gm_result.get("reason", "")
 
                     if _gm_action == "enter":
-                        # Add classifier score bonus to composite score
                         _score_before = total_score
-                        total_score = min(100, total_score + int(_gm_score * 0.3))
                         candidate["_godmode_type"] = _gm_type
-                        logger.info(
-                            f"  🧠 GODMODE {symbol}: type={_gm_type} strat_score={_gm_score:.0f} "
-                            f"→ score {_score_before}→{total_score} (+{total_score-_score_before})"
-                        )
+
+                        # ── FAST PATH: BURST + CLOB_LAUNCH are authoritative ──
+                        # These strategies have already passed valid() + confirm()
+                        # + ExecutionValidator inside classify_and_route().
+                        # Don't penalize them through the slow scoring/chart_state gate.
+                        # Mark fast-path so chart_state gate is bypassed below.
+                        if _gm_type in ("burst", "clob_launch"):
+                            candidate["_fast_path"] = True
+                            candidate["_burst_mode"] = True  # ensure burst gates pass
+                            # Use strategy score directly — no blending with composite
+                            total_score = max(total_score, int(_gm_score))
+                            logger.info(
+                                f"  🚀 FAST-PATH {symbol}: type={_gm_type} "
+                                f"strat_score={_gm_score:.0f} → AUTHORITATIVE ENTRY"
+                            )
+                        else:
+                            # PRE_BREAKOUT / TREND / MICRO_SCALP — advisory bonus only
+                            total_score = min(100, total_score + int(_gm_score * 0.3))
+                            logger.info(
+                                f"  🧠 GODMODE {symbol}: type={_gm_type} strat_score={_gm_score:.0f} "
+                                f"→ score {_score_before}→{total_score} (+{total_score-_score_before})"
+                            )
                     elif _gm_action == "pending":
-                        # Token needs more confirmation — inject as pending (don't skip yet)
                         candidate["_godmode_pending"] = True
                         candidate["_godmode_type"]    = _gm_type
                         logger.info(f"  ⏳ GODMODE PENDING {symbol}: {_gm_reason} — awaiting confirmation")
                     else:
-                        # _gm_action == "skip" — log but don't hard-skip here (let scoring decide)
+                        # skip — log only, let scoring gate decide
                         if _gm_score > 0:
                             logger.debug(f"  🧠 GODMODE {symbol}: {_gm_reason} (type={_gm_type})")
                 except Exception as _gme:
                     logger.debug(f"GodMode classifier error {symbol}: {_gme}")
+
+                # ── Disagreement Engine — second opinion before entry ─────────
+                # Runs 6 independent checks. Any veto kills the trade.
+                # Warns reduce confidence score. Passes add to it.
+                try:
+                    import disagreement as _disagree_mod
+                    _disagree_result = _disagree_mod.evaluate(
+                        candidate  = candidate,
+                        bot_state  = bot_state,
+                        regime     = regime,
+                        score      = total_score,
+                    )
+                    if _disagree_result["verdict"] == "veto":
+                        logger.info(
+                            f"🚫 VETO {symbol}: {_disagree_result['reason']}"
+                        )
+                        continue   # hard skip — no overrides
+                    # Apply confidence adjustment to score
+                    _adj = _disagree_result.get("confidence_adj", 0)
+                    if _adj != 0:
+                        total_score = max(0, round(total_score + _adj * 10))
+                        logger.debug(f"  [disagree] {symbol} score adj {_adj:+.2f} → {total_score}")
+                except ImportError:
+                    pass   # disagreement module not available — non-fatal
+                except Exception as _de:
+                    logger.debug(f"[disagree] error {symbol}: {_de}")
 
                 # ── CLOB momentum score boost ────────────────────────────────
                 _is_clob_boost = candidate.get("_clob_launch", False)
@@ -924,45 +998,83 @@ def run_cycle(bot_state: Dict) -> Dict:
                     logger.info(f"SKIP {symbol}: orphan — rugpull risk, disabled permanently")
                     continue
                 elif chart_state not in PREFERRED_CHART_STATES:
-                    # Allow continuation/expansion if strong TrustSet burst (community forming)
-                    if _is_burst and _burst_count >= 3 and chart_state in ("continuation", "expansion", "accumulation"):
+                    # ── FAST PATH: BURST + CLOB_LAUNCH bypass chart_state gate ──
+                    # Classifier already validated signal quality — chart_state is
+                    # a lagging indicator for momentum plays. Don't block runners.
+                    if candidate.get("_fast_path"):
+                        logger.info(
+                            f"✅ {symbol}: chart_state={chart_state} BYPASSED "
+                            f"— fast-path {candidate.get('_godmode_type','burst')} strategy"
+                        )
+                    # Allow continuation/expansion with TrustSet burst
+                    elif _is_burst and _burst_count >= 3 and chart_state in ("continuation", "expansion", "accumulation"):
                         logger.info(f"✅ {symbol}: {chart_state} ALLOWED — burst={_burst_count} TrustSets override")
-                    # Allow any state if buy cluster (OfferCreate momentum) is strong
+                    # Allow any state if buy cluster is strong
                     elif _is_momentum and _offer_count >= 8:
                         logger.info(f"✅ {symbol}: {chart_state} ALLOWED — buy_cluster={_offer_count} offers override")
-                    # CLOB launch signal — always allow (brizzly/PROPHET/PRSV pattern)
+                    # CLOB launch — always allow
                     elif _is_clob:
                         logger.info(f"✅ {symbol}: {chart_state} ALLOWED — CLOB launch signal {_clob_vol:.0f} XRP/5min")
                     else:
                         logger.info(f"SKIP {symbol}: chart_state={chart_state} (burst={_burst_count}, momentum={_offer_count}) — need pre_breakout or realtime signal")
                         continue
 
-                # Skip stablecoins / fiat-pegged tokens — no meme upside
+                # ── MEMECOIN FILTER — strict XRPL meme-only gate ─────────────
+                # Operator directive: strictly memecoins only. No utility, no
+                # infrastructure, no wrapped assets, no established L1s.
+                sym_up = symbol.upper()
+
+                # Stablecoins / fiat-pegged
                 STABLECOIN_SKIP = {
                     "USD","USDC","USDT","RLUSD","XUSD","AUDD","XSGD","XCHF","GYEN",
-                    "EUR","EURO","EUROP","GBP","JPY","CNY","AUD","CAD","MXRP"
+                    "EUR","EURO","EUROP","GBP","JPY","CNY","AUD","CAD","MXRP",
+                    "USDD","FRAX","LUSD","SUSD","TUSD","BUSD","GUSD","HUSD",
                 }
-                FIAT_PREFIXES = ("USD","EUR","GBP","JPY","CNY","AUD","CAD","STABLE")
-                sym_up = symbol.upper()
+                FIAT_PREFIXES = ("USD","EUR","GBP","JPY","CNY","AUD","CAD","STABLE","PEGGED")
                 if sym_up in STABLECOIN_SKIP or any(sym_up.startswith(p) or sym_up.endswith(p) for p in FIAT_PREFIXES):
                     logger.debug(f"SKIP {symbol}: stablecoin/fiat-pegged — no meme upside")
                     continue
 
-                # Skip non-meme infrastructure / utility / wrapped tokens — no explosive upside
+                # Non-meme: established L1s, infrastructure, utility, DeFi protocols
+                # These have real utility value — they do NOT have meme explosive upside
                 NON_MEME_SKIP = {
-                    # Infrastructure / L1 tokens
+                    # Real L1/L2 blockchain tokens (not memes)
                     "XDC","ETH","WETH","WBTC","BTC","SOL","AVAX","MATIC","BNB","ADA",
-                    "DOT","LINK","UNI","AAVE","CRV","MKR","SNX","COMP","LDO",
-                    # XRPL ecosystem utility (not memes)
-                    "EVR","SOLO","CSC","CORE","LOBSTR","GATEHUB","BITSTAMP",
+                    "DOT","LINK","UNI","AAVE","CRV","MKR","SNX","COMP","LDO","ATOM",
+                    "ALGO","NEAR","FTM","OP","ARB","INJ","SUI","APT","SEI","TIA",
+                    # Real HBAR (Hedera) — though XRPL meme token named HBAR is fine
+                    # (anonymous issuer = meme; verified issuer = skip)
+                    # XRPL ecosystem utility
+                    "EVR","SOLO","CSC","CORE","LOBSTR","GATEHUB","BITSTAMP","XUMM","XAPP",
                     # Wrapped / bridged assets
-                    "WXRP","WXDC",
-                    # DeFi LP / index tokens
-                    "XUMM","XAPP",
+                    "WXRP","WXDC","WFLR","WSGB","WXAH",
+                    # DeFi / governance tokens (not memes)
+                    "BLZE","VLX","EXFI","SFLR",
+                    # Commodity / index
+                    "GOLD","SLVR","OIL","SPX","NDX",
+                    # Real-world asset tokens
+                    "RLUSD","TREASU","TBILL",
                 }
-                NON_MEME_PREFIXES = ("W",)  # Wbridged tokens like WETH, WBTC
+                NON_MEME_PREFIXES = ("W",)   # wrapped tokens
+                NON_MEME_SUFFIXES = ("IOU", "LP", "POOL", "VAULT")
                 if sym_up in NON_MEME_SKIP:
-                    logger.debug(f"SKIP {symbol}: non-meme infrastructure token")
+                    logger.debug(f"SKIP {symbol}: non-meme token — operator meme-only directive")
+                    continue
+                if any(sym_up.startswith(p) for p in NON_MEME_PREFIXES):
+                    logger.debug(f"SKIP {symbol}: wrapped/bridged token — no meme upside")
+                    continue
+                if any(sym_up.endswith(s) for s in NON_MEME_SUFFIXES):
+                    logger.debug(f"SKIP {symbol}: LP/vault token — not a meme")
+                    continue
+
+                # Meme signal requirement: anonymous issuer (no verified domain) OR
+                # supply > 1M tokens (large supply = designed as meme speculation vehicle).
+                # Verified/doxxed issuers with domains are typically NOT memes.
+                _issuer_domain = candidate.get("issuer_domain", "")
+                _supply = candidate.get("supply", 0)
+                _is_verified_utility = bool(_issuer_domain) and _supply < 100_000
+                if _is_verified_utility:
+                    logger.debug(f"SKIP {symbol}: verified issuer domain={_issuer_domain} — likely utility, not meme")
                     continue
 
                 # Skip known repeat hard-stop offenders
@@ -1047,9 +1159,13 @@ def run_cycle(bot_state: Dict) -> Dict:
                     _trade_mode = "hold"
                     if _SIZING_AVAILABLE:
                         # Gather confidence signals for dynamic sizing
+                        _is_ts_burst = bool(candidate.get("signal_type") == "trustset_velocity" or candidate.get("_burst_mode"))
+                        _ts_burst_count = int(candidate.get("burst_count", 0) or candidate.get("trustsets_1h", 0))
                         _ci = {
                             "wallet_cluster_active": bool(cluster_mod.get_cluster_signal(key) if hasattr(cluster_mod, "get_cluster_signal") else False),
-                            "alpha_signal_active": bool(candidate.get("signal_type") == "trustset_velocity" or candidate.get("_burst_mode")),
+                            "alpha_signal_active": bool(_is_ts_burst),
+                            "ts_burst_active": _is_ts_burst,           # explosive early launch signal
+                            "ts_burst_count": _ts_burst_count,         # TrustSets/hr — scales position
                             "ml_probability": 0.5,  # default; overridden by ML if available
                             "regime": regime,
                             "smart_wallet_count": len(sm_result.get("wallets", [])),
@@ -1474,6 +1590,27 @@ def run_cycle(bot_state: Dict) -> Dict:
                         exit_check = {"exit": True, "partial": False, "reason": f"tvl_drain_{tvl_drop:.0%}", "fraction": 1.0}
                         logger.info(f"🚨 {symbol}: TVL dropped {tvl_drop:.0%} ({prev_tvl:.0f}→{current_tvl:.0f} XRP) — pool drain exit")
 
+            # ── Strategy-aware stale exit ────────────────────────────────────
+            # Each strategy has its own max hold time. BURST exits in 1hr,
+            # PRE_BREAKOUT gets 3hr. Prevents capital being locked in dead trades.
+            if not exit_check["exit"]:
+                try:
+                    _strat_exits = dynamic_tp_mod._get_strategy_exits(pos)
+                    _stale_limit = _strat_exits.get("stale_hours", 2.0)
+                    _held_hours  = (now - pos.get("entry_time", now)) / 3600
+                    if _held_hours > _stale_limit:
+                        _strat_name = pos.get("_godmode_type", "default")
+                        exit_check = {
+                            "exit": True, "partial": False, "fraction": 1.0,
+                            "reason": f"stale_{_strat_name}_{_held_hours:.1f}hr",
+                        }
+                        logger.info(
+                            f"⏰ STALE EXIT {symbol}: {_strat_name} held {_held_hours:.1f}hr "
+                            f"> limit {_stale_limit}hr"
+                        )
+                except Exception as _ste:
+                    logger.debug(f"Stale exit check error: {_ste}")
+
             # ── Dynamic TP Module (Audit #4) — 3-layer exit system ────────────
             # Runs AFTER scoring, BEFORE execution. Overrides existing TP if enabled.
             from config import DYNAMIC_TP_ENABLED
@@ -1507,8 +1644,11 @@ def run_cycle(bot_state: Dict) -> Dict:
                             "reason": f"dynamic_tp_{dt_result['reason']}",
                             "fraction": dt_result["pct"],
                         }
-                        # Mark profit lock levels as exited
-                        dynamic_tp_mod.mark_profit_lock_exit(pos, dt_result["reason"])
+                        # Mark profit lock levels as exited (pass tp_flag for new system)
+                        dynamic_tp_mod.mark_profit_lock_exit(
+                            pos, dt_result["reason"],
+                            tp_flag=dt_result.get("_tp_flag")
+                        )
                     # If 'hold', fall through to existing TP system as fallback
 
                 except Exception as _dte:
@@ -1615,6 +1755,20 @@ def run_cycle(bot_state: Dict) -> Dict:
                     dash_log(f"📤 CLOSED {symbol}: {pnl_pct:+.1%} ({pnl_xrp:+.2f} XRP) [{reason}]")
                     update_stats(pnl=pnl_xrp, trades=len(bot_state.get("trade_history", [])), win=(pnl_xrp > 0), loss=(pnl_xrp <= 0))
                     remove_position(symbol)
+
+                    # ── Feed real outcome back into Shadow ML strategy weights ──
+                    try:
+                        if _SHADOW_ML_AVAILABLE:
+                            _shadow_ml.record_real_outcome(
+                                symbol        = symbol,
+                                strategy_type = pos.get("_godmode_type", "unknown"),
+                                entry_price   = pos.get("entry_price", 0),
+                                exit_price    = current_price,
+                                exit_reason   = reason,
+                            )
+                    except Exception as _sme:
+                        logger.debug(f"[shadow_ml] record_real_outcome error: {_sme}")
+
                     # Trigger self-learning after every closed trade
                     try:
                         learn_mod.run_learning()

@@ -17,23 +17,6 @@ from typing import Dict, Optional
 from config import SCORE_ELITE, SCORE_TRADEABLE, SCORE_SMALL
 
 
-def get_tg_signal_boost(symbol: str) -> int:
-    """Check tg_signals.json for an active social signal boost for this token."""
-    import json, time
-    from pathlib import Path
-    sig_file = Path(__file__).parent / "state" / "tg_signals.json"
-    if not sig_file.exists():
-        return 0
-    try:
-        signals = json.loads(sig_file.read_text())
-        sig = signals.get(symbol.upper())
-        if sig and sig.get("expires", 0) > time.time():
-            return int(sig.get("strength", 0))
-    except Exception:
-        pass
-    return 0
-
-
 def compute_score(
     breakout_quality:  int   = 0,
     chart_state:       str   = "dead",
@@ -129,11 +112,7 @@ def compute_score(
     sm_pts = min(10, smart_money_boost)
     breakdown["smart_money"] = sm_pts
 
-    # 6b. TG social signal boost: 0-30 pts (from tg_signal_listener.py)
-    tg_boost = get_tg_signal_boost(symbol) if symbol else 0
-    breakdown["tg_signal"] = tg_boost
-
-    # 6c. Wallet Cluster boost (Audit #2): +30 if 2+ smart wallets entering same token
+    # 6b. Wallet Cluster boost (Audit #2): +30 if 2+ smart wallets entering same token
     cluster_boost = 0
     try:
         import wallet_cluster as _wc
