@@ -26,6 +26,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Optional
 
+from warden_security_patch import send_telegram_message, rpc_call
+
 # ── Paths ─────────────────────────────────────────────────────────────────────
 BOT_DIR    = Path(__file__).parent
 STATE_DIR  = BOT_DIR / "state"
@@ -33,9 +35,7 @@ REGISTRY_F = STATE_DIR / "active_registry.json"
 HOT_FILE   = STATE_DIR / "hot_launches.json"
 LOG_FILE   = STATE_DIR / "amm_watcher.log"
 
-WS_URL     = "ws://xrpl-rpc.goons.app:51238"
-CLIO_URL   = "http://xrpl-rpc.goons.app:51233"
-TG_TOKEN   = "8498015516:AAHt_MfpW-c64yL22xumDc0WyUF-vIBdYAU"
+WS_URL     = "wss://rpc.xrplclaw.com"
 
 # Minimum XRP TVL to care about a new launch
 MIN_LAUNCH_TVL = 500   # XRP — even very thin launches are worth watching
@@ -53,36 +53,14 @@ logging.basicConfig(
 log = logging.getLogger("amm_watcher")
 
 
-def rpc(method: str, params: dict) -> dict:
-    try:
-        r = requests.post(CLIO_URL, json={"method": method, "params": [params]}, timeout=10)
-        return r.json().get("result", {})
-    except:
-        return {}
-
-
 def send_tg(msg: str):
     try:
-        # Send to the first chat that messaged the bot (or hardcode chat_id)
         hot = load_hot_launches()
         chat_id = hot.get("tg_chat_id")
         if not chat_id:
-            # Try to get chat_id from getUpdates
-            r = requests.get(f"https://api.telegram.org/bot{TG_TOKEN}/getUpdates?limit=5", timeout=5)
-            updates = r.json().get("result", [])
-            for u in updates:
-                cid = (u.get("message", {}) or {}).get("chat", {}).get("id")
-                if cid:
-                    chat_id = cid
-                    hot["tg_chat_id"] = chat_id
-                    save_hot_launches(hot)
-                    break
-        if chat_id:
-            requests.post(
-                f"https://api.telegram.org/bot{TG_TOKEN}/sendMessage",
-                json={"chat_id": chat_id, "text": msg, "parse_mode": "Markdown"},
-                timeout=5
-            )
+            log.warning("No tg_chat_id set —TG notification skipped.")
+            return
+        send_telegram_message(msg, str(chat_id))
     except Exception as e:
         log.warning(f"TG send error: {e}")
 
@@ -134,7 +112,7 @@ def hex_to_symbol(hex_str: str) -> str:
 
 def get_amm_info(asset1: dict, asset2: dict) -> Optional[dict]:
     """Fetch AMM pool info for a token pair."""
-    r = rpc("amm_info", {"asset": asset1, "asset2": asset2})
+    r = rpc_call("amm_info", {"asset": asset1, "asset2": asset2})
     return r.get("amm")
 
 
