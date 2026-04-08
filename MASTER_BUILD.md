@@ -1,6 +1,49 @@
 # DKTrenchBot v2 — MASTER BUILD
 ## Final Configuration — April 8, 2026
 
+---
+
+## 🔐 SECURITY PATCH — Telegram Removed (Apr 8, 2026)
+
+**Severity:** Critical — hot wallet exposure via hardcoded TG bot token
+**Decision:** Operator opted to remove all Telegram code permanently
+
+### What changed
+| File | Change |
+|------|--------|
+| `tg_scanner_listener.py` | **DELETED** — had hardcoded TG token + chat discovery |
+| `tg_signal_listener.py` | **DELETED** — had hardcoded TG token |
+| `warden_security_patch.py` | Stripped TG functions → **RPC failover only** |
+| `amm_launch_watcher.py` | `send_tg()` removed, TG import removed, `rpc()` → `rpc_call()` |
+| `bot.py` | `tg_scanner_boost` removed from scoring |
+| `scoring.py` | `get_tg_signal_boost()` removed, TG signal scoring removed |
+| `state/tg_*.json` | Deleted stale state files |
+
+### RPC Failover (what replaced TG in warden_security_patch.py)
+```python
+RPC_ENDPOINTS = [
+    "https://rpc.xrplclaw.com",
+    "https://xrplcluster.com",
+    "https://s1.ripple.com:51234"
+]
+def rpc_call(method: str, params: dict, timeout: int = 10):
+    for url in RPC_ENDPOINTS:
+        try:
+            r = requests.post(url, json={"method": method, "params": [params]}, timeout=timeout)
+            if "result" in r.json(): return r.json()["result"]
+        except: continue
+    return {}
+```
+
+### Security posture after patch
+- Bot wallet: **fully air-gapped from Telegram**
+- All scanning/monitoring: **on-chain only**
+- External comms: **none**
+- RPC: **failover enabled** (was single endpoint before)
+
+### Commit
+`c511272` — remove_all_telegram: purge TG listeners, strip TG from scoring/bot/amm_watcher
+
 This document is the canonical reference for the fully upgraded bot.
 Every file changed today is documented here in full.
 

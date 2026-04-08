@@ -206,4 +206,31 @@ Any veto = hard skip, no overrides:
 
 ---
 
-*Last updated: 2026-04-08 20:00 UTC*
+---
+
+## 🔐 SECURITY PATCH — Telegram Removal (Apr 8, 2026)
+
+**Severity:** Critical — hot wallet exposure
+**Change:** Complete removal of all Telegram code
+
+### What was removed
+| File | Risk |
+|------|------|
+| `tg_scanner_listener.py` | Hardcoded TG bot token + chat discovery |
+| `tg_signal_listener.py` | Hardcoded TG bot token |
+| `state/tg_*.json` | Stale TG state files |
+| `amm_launch_watcher.py` | `send_tg()`, TG import, `tg_chat_id` |
+| `bot.py` | `tg_scanner_boost` from scoring |
+| `scoring.py` | `get_tg_signal_boost()` + TG signal component |
+
+### What stays
+- `warden_security_patch.py` — **RPC failover** (xrplclaw.com → xrplcluster.com → s1.ripple.com)
+- `amm_launch_watcher.py` — logs launches to `state/hot_launches.json` (no external comms)
+- Bot fully operational, purely on-chain
+
+### Commit
+`c511272` — remove_all_telegram: purge TG listeners, strip TG from scoring/bot/amm_watcher
+
+---
+
+*Last updated: 2026-04-08 20:13 UTC*
