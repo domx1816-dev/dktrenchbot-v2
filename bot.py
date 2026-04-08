@@ -119,6 +119,7 @@ import new_wallet_discovery as wallet_discovery_mod
 import wallet_cluster as cluster_mod
 import alpha_recycler as recycler_mod
 import dynamic_tp as dynamic_tp_mod
+import classifier as classifier_mod
 
 # ── Safety Controller & Shadow Lane ──────────────────────────────────────────
 import safety_controller as safety_ctrl_mod
@@ -627,8 +628,9 @@ def run_cycle(bot_state: Dict) -> Dict:
     score_adj = bot_state.get("score_overrides", {})
     threshold_adj    = score_adj.get("score_threshold_adj", 0)
     size_mult_global = score_adj.get("size_multiplier", 1.0)
-    # FIX: base was SCORE_SMALL (50) — allowed score=40-49 entries (6% WR, -26 XRP)
-    # Base must be SCORE_TRADEABLE (60) — data shows 50-59 is barely profitable and only works at pre_breakout
+    # FIX: Base is SCORE_TRADEABLE (45) — GodMode classifier adds quality layer on top
+    # so we can afford lower composite threshold without capturing low-quality entries.
+    # Regime adjustment still applies (danger = +5, cold = +2).
     effective_threshold = SCORE_TRADEABLE + threshold_adj + adj.get("score_threshold", 0)
 
     # ── 3-6. Evaluate candidates and enter positions ───────────────────────────
@@ -804,6 +806,41 @@ def run_cycle(bot_state: Dict) -> Dict:
                 )
                 total_score = score_result["total"]
                 band        = score_result["band"]
+
+                # ── GodMode Token Classifier (audit #5) ───────────────────────
+                # Runs BEFORE score threshold check — routes to strategy type,
+                # adds classifier score bonus, and annotates candidate for logging.
+                # Provides strategy-level signal boost independent of composite score.
+                try:
+                    _price_hist = scanner._load_history().get(key, [])
+                    _gm_result = classifier_mod.classify_and_route(
+                        candidate, _price_hist, cycle_wallet_xrp
+                    )
+                    _gm_action  = _gm_result.get("action", "skip")
+                    _gm_type    = _gm_result.get("token_type", "none")
+                    _gm_score   = _gm_result.get("strategy_score", 0)
+                    _gm_reason  = _gm_result.get("reason", "")
+
+                    if _gm_action == "enter":
+                        # Add classifier score bonus to composite score
+                        _score_before = total_score
+                        total_score = min(100, total_score + int(_gm_score * 0.3))
+                        candidate["_godmode_type"] = _gm_type
+                        logger.info(
+                            f"  🧠 GODMODE {symbol}: type={_gm_type} strat_score={_gm_score:.0f} "
+                            f"→ score {_score_before}→{total_score} (+{total_score-_score_before})"
+                        )
+                    elif _gm_action == "pending":
+                        # Token needs more confirmation — inject as pending (don't skip yet)
+                        candidate["_godmode_pending"] = True
+                        candidate["_godmode_type"]    = _gm_type
+                        logger.info(f"  ⏳ GODMODE PENDING {symbol}: {_gm_reason} — awaiting confirmation")
+                    else:
+                        # _gm_action == "skip" — log but don't hard-skip here (let scoring decide)
+                        if _gm_score > 0:
+                            logger.debug(f"  🧠 GODMODE {symbol}: {_gm_reason} (type={_gm_type})")
+                except Exception as _gme:
+                    logger.debug(f"GodMode classifier error {symbol}: {_gme}")
 
                 # ── CLOB momentum score boost ────────────────────────────────
                 _is_clob_boost = candidate.get("_clob_launch", False)
@@ -1218,6 +1255,10 @@ def run_cycle(bot_state: Dict) -> Dict:
                         "scalp_mode":   candidate.get("_scalp_mode", False),
                         "trade_mode":   candidate.get("_trade_mode", "hold"),
                         "is_proven":    _is_proven,
+                        # GodMode engine: strategy type + TP targets
+                        "_godmode_type":  candidate.get("_godmode_type", "unknown"),
+                        "_godmode_tp":    _gm_result.get("tp_targets") if candidate.get("_godmode_type") else None,
+                        "_godmode_hardstop": _gm_result.get("hard_stop_pct") if candidate.get("_godmode_type") else None,
                     }
                     state_mod.add_position(bot_state, key, position)
 

@@ -29,7 +29,7 @@ POLL_INTERVAL_SEC = 1
 # score well but are already discovered and don't move.
 # Strategy: accept lower-scoring tokens (real runners), reject high-score stales.
 SCORE_ELITE        = 50    # 50+ → elite size — DATA shows this is the real sweet spot
-SCORE_TRADEABLE    = 30    # 50+ → normal entry (raised from 42 — improve_loop: 62% of losses scored 50-59)
+SCORE_TRADEABLE    = 45    # 45+ → normal entry — GodMode audit: classifier layer guards quality now
 SCORE_SMALL        = 999   # DISABLED — no small band, use scalp mode instead
 PREFERRED_CHART_STATES = {"pre_breakout"}  # only state with runners — data confirmed
 
@@ -39,7 +39,7 @@ XRP_ELITE_BASE     = 12.0   # Elite entry (50+) — confident
 XRP_SMALL_BASE     = 4.0    # Scalp / micro entries
 XRP_SNIPER_BASE    = 5.0    # Sniper entries
 XRP_MICRO_BASE     = 5.0    # Micro-cap new token
-MAX_POSITIONS = 5   # warden defensive: drawdown alarm
+MAX_POSITIONS = 10   # GodMode rebuild: 10 concurrent positions to capture more runners
 
 # ── TVL Thresholds ─────────────────────────────────────────────────────────────
 # DATA: Winners cluster in micro TVL (under 3K XRP). Established pools (5K-20K)

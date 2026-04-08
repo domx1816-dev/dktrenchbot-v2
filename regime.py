@@ -69,13 +69,13 @@ def get_regime_adjustments(regime: str) -> Dict:
         },
         "cold": {
             "size_mult":       0.75,  # was 0.5 — don't be too timid, miss winners
-            "score_threshold": 5,     # was +10 — looser so we don't miss entries
+            "score_threshold": 3,     # GodMode: +3 in cold (was 5) — classifier guards quality
             "max_positions":   4,     # was 3
             "allow_entry":     True,
         },
         "danger": {
             "size_mult":       0.5,   # half size — stay in the game, don't ghost
-            "score_threshold": 8,     # +8 threshold (was +20 — was killing all entries)
+            "score_threshold": 5,     # GodMode: +5 in danger (was 8) — classifier secondary gate
             "max_positions":   3,     # 3 max in danger
             "allow_entry":     True,
         },
