@@ -106,22 +106,23 @@ XRPL Chain
                        │
                        ▼
 ┌─────────────────────────────────────────────────────────┐
-│  SIZING ENGINE  (sizing.py)                             │
-│  ONE place controls risk — no scattered logic          │
-│  Inputs: strategy, score, balance, confidence signals  │
-│  Burst TVL guard:                                      │
-│    TVL<200  → 7 XRP hard cap (slippage protection)    │
-│    TVL200-500→ 7-15 XRP linear scale                  │
-│    TVL≥500  → full sizing, 1.0x flat                  │
-│  Burst multiplier: 8+TS→+20% | 25+→+35% | 50+→+50%  │
+│  EXECUTION CORE  (execution_core.py) — NEW Apr 8       │
+│  Centralized pipeline (GodMode fast-path only):        │
+│    1. Confidence gate  (≥0.44, hard stop)            │
+│    2. Strategy ownership (classifier authorizes)       │
+│    3. Strategy valid()/confirm() checks                │
+│    4. Pre-trade validator (slippage/liquidity/route)  │
+│    5. Position sizer ($5 min, MC-based % of TVL)     │
+│    6. Split execution (40/60 legs, 2s wait)          │
+│  Legacy path → direct execution.buy_token() fallback   │
 └──────────────────────┬──────────────────────────────────┘
                        │
                        ▼
 ┌─────────────────────────────────────────────────────────┐
-│  EXECUTE  (execution.py)                                │
-│  AMM swap via private CLIO endpoint                    │
-│  Slippage guard: skip if entry slippage >2.5%         │
-│  Trustline set → AMMSwap → position recorded          │
+│  EXECUTE  (execution.py)                               │
+│  AMM via OfferCreate IOC + private CLIO endpoint     │
+│  Split legs: leg1 (40%) then leg2 (60%) after 2s     │
+│  Trustline set → OfferCreate IOC → position recorded  │
 └──────────────────────┬──────────────────────────────────┘
                        │
                        ▼
@@ -384,6 +385,107 @@ def get_real_strategy_weights(self) -> dict:
 
 ---
 
+### 8. execution_core.py — NEW FILE (Apr 8, 2026)
+
+**Purpose:** Centralized trade execution pipeline replacing the inline execution block in `bot.py`.
+
+```
+Pipeline:
+  execute_trade() → pre_trade_validator() → position_sizer() → split_execute()
+```
+
+**Key parameters:**
+```python
+MIN_POSITION_XRP   = 5.0    # absolute floor — no trades below this (was 3.0)
+MIN_CONFIDENCE     = 0.44   # classifier confidence gate — hard stop
+MAX_SLIPPAGE       = 0.15   # 15% — pre-trade slippage cap (was 2.5% post-entry)
+MIN_LIQUIDITY_USD  = 300    # ultra micro-cap guard
+```
+
+**Liquidity engine (`get_safe_entry_size`):**
+```python
+MC < $2k   → 1.5% of TVL  (was hard 7 XRP cap — now scales)
+MC < $10k  → 2.5% of TVL
+MC > $10k  → 3.0% of TVL
+# All floors at MIN_POSITION_XRP = 5.0 XRP
+```
+
+**Pre-trade validator gates (all non-bypassable):**
+```python
+def pre_trade_validator(token):
+    slippage = estimate_slippage(token)   # 80 / liquidity_usd
+    if slippage > 0.15:    return False   # MAX_SLIPPAGE
+    if liquidity < 300:     return False   # MIN_LIQUIDITY_USD
+    if route != "GOOD":     return False
+    return True
+```
+
+**Split execution:**
+```python
+def split_execute(token, size, side="buy"):
+    leg1 = size * 0.40
+    leg2 = size * 0.60
+    tx1 = execute_order(token, leg1)
+    if not tx1["success"]: return tx1
+    time.sleep(2.0)   # stability wait between legs
+    tx2 = execute_order(token, leg2)
+    return {"first": tx1, "second": tx2, "split": True, "size": size}
+```
+
+**Strategy base risk (per-type, used in position_sizer):**
+```python
+_STRATEGY_BASE_RISK = {
+    "burst":        0.20,
+    "clob_launch":  0.20,
+    "pre_breakout": 0.15,
+    "trend":        0.12,
+    "micro_scalp":  0.06,
+    "none":         0.06,
+}
+```
+
+**Integration in bot.py:**
+- GodMode fast-path (BURST, CLOB_LAUNCH) → `execute_trade()` as authoritative entry
+- Legacy score-threshold path → preserved as fallback (single-shot execution)
+- Classifier `classify_and_route()` result provides `strategy` object + `classification` dict
+
+```python
+# bot.py — execution block (approx line 1295)
+if _gm_result.get("action") == "enter" and _gm_result.get("strategy"):
+    _exec_result = execute_trade(
+        token          = {"symbol": symbol, "issuer": issuer, "price": price,
+                         "liquidity_usd": candidate.get("liquidity_usd", 0),
+                         "market_cap": candidate.get("market_cap", 0)},
+        classification = _gm_result.get("classification", {}),
+        strategy       = _gm_result["strategy"],
+        wallet_state   = {"balance": cycle_wallet_xrp, "drawdown": _drawdown_pct},
+        route_quality  = route.get("quality", "GOOD"),
+        side           = "buy",
+    )
+else:
+    # Legacy fallback
+    _exec_result = execution.buy_token(...)
+    _exec_result = {"first": _exec_result, "split": False}
+```
+
+**Commit:** `97342df` — execution_core: centralized trade engine with 5 XRP floor + split entry
+
+---
+
+## Execution Core vs Legacy Sizing
+
+| Aspect | Old (sizing.py) | New (execution_core) |
+|--------|----------------|----------------------|
+| Min position | 3.0 XRP | **5.0 XRP** |
+| Micro-cap sizing | 7 XRP hard cap | **1.5% of TVL → floors to $5** |
+| Slippage check | post-entry (2.5% gate) | **pre-entry (15% cap)** |
+| Entry method | single shot | **40/60 split** |
+| Confidence gate | none | **0.44 minimum** |
+| Route quality | partial | **GOOD required** |
+| Strategy ownership | none | **enforced via classifier** |
+
+---
+
 ## Performance Benchmarks
 
 ### Real Data (Old Bot, Apr 6-8)
@@ -422,14 +524,17 @@ At current 160 XRP balance, dynamic sizing is safe. As balance grows:
 ## Live Config Summary
 
 ```
-Bot wallet:     rKQACag8Td9TrMxBwYJPGRMDV8cxGfKsmF
-Bot path:       /home/agent/workspace/trading-bot-v2/bot.py
-Cycle:          1 second
-Max positions:  10
-Min TVL:        200 XRP
-Slippage buf:   10%
-Score threshold: 45 (normal) | 35 (scalp)
-Dashboard:      https://dktrenchbot.pages.dev
+Bot wallet:         rKQACag8Td9TrMxBwYJPGRMDV8cxGfKsmF
+Bot path:           /home/agent/workspace/trading-bot-v2/bot.py
+Execution core:     /home/agent/workspace/trading-bot-v2/execution_core.py
+Cycle:              1 second
+Max positions:      10
+Min position:       5.0 XRP (execution_core MIN_POSITION_XRP)
+Min liquidity:      $300 USD (execution_core MIN_LIQUIDITY_USD)
+Max slippage:       15% (pre-trade gate)
+Confidence gate:    0.44 minimum
+Entry method:       40/60 split (2s stability wait between legs)
+Dashboard:          https://dktrenchbot.pages.dev
 ```
 
 ---
