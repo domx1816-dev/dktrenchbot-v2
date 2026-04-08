@@ -112,7 +112,6 @@ import dynamic_exit
 import smart_money
 import learn as learn_mod
 import reconcile as reconcile_mod
-import learn_engine
 import wallet_hygiene
 import improve as improve_mod
 import report as report_mod
@@ -786,9 +785,9 @@ def run_cycle(bot_state: Dict) -> Dict:
 
                 # Route check
                 route = route_engine.evaluate_route(symbol, issuer, amm, xrp_size)
-                # learn_engine.select_best_route() integration point — use when route_engine exposes multi-route API
-                _selected = learn_engine.select_best_route([route]) if route else None
-                learn_engine.update_execution_stats({"route": "primary", "slippage": route.get("best_slippage", 0)})
+                # brain.select_best_route() integration point — use when route_engine exposes multi-route API
+                _selected = brain.select_best_route([route]) if route else None
+                brain.update_execution_stats({"route": "primary", "slippage": route.get("best_slippage", 0)})
                 if not route.get("trade_ok"):
                     logger.info(f"SKIP {symbol}: route fail — {route.get('reject_reason')}")
                     continue
@@ -1209,10 +1208,10 @@ def run_cycle(bot_state: Dict) -> Dict:
                 # Pool safety + adaptive sizing (learn_engine) -- BEFORE final_size check
                 _pool_key = symbol + ":" + str(token.get("issuer", token.get("currency","")))
                 _pool_tok = {"key": _pool_key, "pool_id": _pool_key}
-                if not learn_engine.is_pool_safe(_pool_tok):
+                if not brain.is_pool_safe(_pool_tok):
                     logger.info(f"POOL_UNSAFE {symbol}: pool behavior -- skipped")
                 else:
-                    _adj = learn_engine.adjust_size_for_strategy(final_size, candidate.get("_godmode_type","unknown"))
+                    _adj = brain.adjust_size_for_strategy(final_size, candidate.get("_godmode_type","unknown"))
                     if _adj < final_size:
                         final_size = _adj
                 if final_size < 1.0:
@@ -1378,7 +1377,7 @@ def run_cycle(bot_state: Dict) -> Dict:
                                 issuer         = issuer,
                                 token_amount   = tokens_received,
                                 expected_price = actual_price,
-                                slippage_tolerance = learn_engine.predict_slippage(token, final_size),
+                                slippage_tolerance = brain.predict_slippage(token, final_size),
                             )
                             if sell_result.get("success"):
                                 logger.info(f"✅ Slippage recovery sell succeeded for {symbol}: {sell_result.get('xrp_received', 0):.4f} XRP recovered")
@@ -1806,7 +1805,7 @@ def run_cycle(bot_state: Dict) -> Dict:
                             logger.debug(f"[ml] log_exit_features error: {_mle}")
 
                     state_mod.record_trade(bot_state, trade)
-                    learn_engine.update_after_trade({
+                    brain.update_after_trade({
                         "strategy": pos.get("_godmode_type","unknown"),
                         "pnl_xrp": pnl_xrp,
                         "win": pnl_xrp > 0,
