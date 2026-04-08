@@ -79,12 +79,15 @@ ORPHAN_MIN_SCORE       = 999   # DISABLED — 14% WR, rugpull magnet
 
 # ── Scalp Mode ─────────────────────────────────────────────────────────────────
 # Quick 10% target for borderline tokens. Tight stop, time-limited.
-SCALP_MIN_SCORE    = 35     # lowered — data shows 35-41 WR=47% (!)
-SCALP_MAX_SCORE    = 41     # below main threshold
-SCALP_SIZE_XRP     = 4.0    # small position
-SCALP_TP_PCT       = 0.10   # +10% → full exit
-SCALP_STOP_PCT     = 0.08   # -8% → full exit
-SCALP_MAX_HOLD_MIN = 45     # 45 min max
+# ── Micro Scalp (ghost pool hunter) — FIXED Apr 8 2026 ─────────────────────────────────
+# Old SCALP was broken: 1.1x TP with 8% slippage = +2% net = guaranteed loser
+# New targets ghost pools that run 4-10x on strong TrustSet bursts
+SCALP_MIN_SCORE    = 42     # raised from 40 — filter out 35-41 zero-WR band; data shows 42+ catches all quality entries
+SCALP_MAX_SCORE    = 52     # upper bound — 53+ starts hitting stale discovered pools, data shows diminishing WR
+SCALP_SIZE_XRP     = 5.0    # keep small — ghost tokens are high risk
+SCALP_TP_PCT       = 1.50   # +150% → TP1 at 2.5x, TP2 at 4.0x (TP ladder in dynamic_tp.py)
+SCALP_STOP_PCT     = 0.08   # -8% hard stop — ghost rug risk is real
+SCALP_MAX_HOLD_MIN = 60     # extended from 45 → 60 min — give runs room to develop
 
 # ── Regime ────────────────────────────────────────────────────────────────────
 REGIME_HOT_THRESHOLD    = 0.55   # WR above this = hot

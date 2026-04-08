@@ -262,13 +262,15 @@ def _get_strategy_exits(position: Dict) -> Dict:
             "hard_stop":  0.08,
             "stale_hours": 2.0,
         },
-        # MICRO_SCALP — tiny pool, quick flip.
-        # 10–20% and out. Tight everything.
+        # MICRO_SCALP — ghost pool hunter, optimized Apr 8 2026
+        # Ghost pools run HARD — 4x target gives room to catch the big moves
+        # Old: (1.1x→60%, 1.2x→100%) was broken — +2% net after slippage = guaranteed loser
+        # New: 2.5x→50% locks real profit, 4.0x→100% lets big runs pay off
         "micro_scalp": {
-            "tps": [(1.10, 0.60), (1.20, 1.0)],
-            "trail_stop": 0.08,
-            "hard_stop":  0.06,
-            "stale_hours": 0.75,
+            "tps": [(2.50, 0.50), (4.00, 1.0)],
+            "trail_stop": 0.20,   # widened from 8% — ghost pools swing 10-20% intraday, 8% was stopping out on noise
+            "hard_stop":  0.08,   # keep at 8% — ghost rug risk is real, need the hard exit
+            "stale_hours": 1.00,   # extended from 45min → 1hr — gives tokens room to develop
         },
     }
 

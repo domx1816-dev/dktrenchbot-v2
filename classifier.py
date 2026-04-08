@@ -129,10 +129,12 @@ class Classifier:
         Main classification logic.
         Returns TokenType enum value.
         """
-        # ── CLOB_LAUNCH: age < 120s AND orderbook volume > 0
+        # ── CLOB_LAUNCH: age < 300s AND orderbook volume > 0
         # Pattern: brizzly, PROPHET, PRSV — orderbook drives launch, not AMM
-        # These tokens have active CLOB orders — trustset burst alone isn't enough
-        if token.age < 120:
+        # Widen from 120s → 300s (Apr 8 2026): original 120s was too tight, real CLOB
+        # launches persist 5-10 min. Scanner needs time to pick them up. 300s window
+        # catches the early move without including stale/expired orderbook setups.
+        if token.age < 300:
             # Require CLOB vol signal
             if token.meta.get("clob_vol_5min", 0) >= 10:
                 return TokenType.CLOB_LAUNCH
@@ -226,12 +228,14 @@ class PreBreakoutStrategy(Strategy):
     """
     PRE_BREAKOUT — large TVL, low velocity (accumulation compression).
     Strategy: wait for breakout confirmation, size large, hold for 5x+.
-    Valid: TVL > 80K
+    Valid: TVL > 80K AND score >= 45 (Apr 8 2026: data shows score<45 = 24% WR, score>=45 = 58%+ WR)
     Confirm: velocity < 1.3 (still compressing)
     Score: TVL / 1000, capped at 100
     """
     def valid(self, token: Token) -> bool:
-        return token.tvl > 80_000
+        # Score minimum gate — Apr 8 2026: backtest confirmed score<45 is loss territory
+        score = min(100, token.tvl / 1000)
+        return token.tvl > 80_000 and score >= 45
 
     def confirm(self, token: Token) -> bool:
         return token.velocity < 1.3 and token.meta.get("chart_state") == "pre_breakout"
