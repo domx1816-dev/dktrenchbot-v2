@@ -228,6 +228,14 @@ def buy_token(symbol: str, issuer: str, xrp_amount: float,
         )
 
     tx = Payment(**tx_kwargs)
+    
+    # DEBUG: Log transaction details for troubleshooting
+    logger.debug(
+        f"Payment tx: symbol={symbol} | currency={currency[:8]}... | "
+        f"issuer={issuer[:8]}... | send_max={send_max_drops} drops | "
+        f"amount_ceiling={token_ceiling} | deliver_min={tx_kwargs.get('deliver_min', 'NONE')} | "
+        f"flags=0x{0x00020000:08X}"
+    )
 
     result = _submit_with_retry(tx, wallet)
     latency = time.time() - start_ts
@@ -352,7 +360,11 @@ def sell_token(symbol: str, issuer: str, token_amount: float,
 
 
 def _submit_with_retry(tx, wallet, max_retries: int = 3) -> Dict:
-    """Submit transaction with exponential backoff retries."""
+    """Submit transaction with exponential backoff retries.
+    
+    CRITICAL: Never retry on tem* (malformed) errors — the sequence number
+    has already been consumed, so retries will fail with temBAD_SIGNATURE.
+    """
     from xrpl.clients import WebsocketClient
     from xrpl.transaction import submit_and_wait
 
@@ -370,13 +382,24 @@ def _submit_with_retry(tx, wallet, max_retries: int = 3) -> Dict:
                 else:
                     last_error = response.result.get("engine_result", "unknown")
                     logger.warning(f"TX failed (attempt {attempt+1}): {last_error}")
+                    
+                    # NEVER retry on malformed transaction errors (tem*)
+                    # The sequence number is already consumed — retry produces temBAD_SIGNATURE
+                    if last_error.startswith("tem"):
+                        logger.warning(f"TX malformed ({last_error}) — not retrying")
+                        break
+                    
                     # Don't retry on definitive failures
-                    logger.warning(f"TX failed detail: {response.result}")
-                    if last_error in ("tecNO_DST", "tecNO_PERMISSION", "temBAD_AMOUNT", "tecUNFUNDED_OFFER", "tecPATH_DRY", "tecKILLED"):
+                    if last_error in ("tecNO_DST", "tecNO_PERMISSION", "tecUNFUNDED_OFFER", "tecPATH_DRY", "tecKILLED"):
                         break
         except Exception as e:
             last_error = str(e)
             logger.warning(f"TX exception (attempt {attempt+1}): {e}")
+            
+            # Check if it's a malformed error
+            if "temBAD" in str(e):
+                logger.warning(f"TX malformed — not retrying")
+                break
 
         if attempt < max_retries - 1:
             wait = 2 ** attempt

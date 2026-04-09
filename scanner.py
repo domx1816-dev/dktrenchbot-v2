@@ -8,6 +8,8 @@ import json
 import logging
 import os
 import time
+
+logger = logging.getLogger("scanner")
 import requests
 from typing import Dict, List, Optional, Tuple
 from config import CLIO_URL, STATE_DIR, TOKEN_REGISTRY, MIN_TVL_XRP, get_currency
@@ -57,15 +59,67 @@ def _rpc(method: str, params: dict) -> Optional[dict]:
 
 def get_amm_info(symbol: str, issuer: str, currency: str = None) -> Optional[Dict]:
     """Fetch AMM pool info for a token/XRP pair.
-    Pass currency directly if known (avoids get_currency() recomputation errors)."""
+    Pass currency directly if known (avoids get_currency() recomputation errors).
+    
+    Falls back to direct AMM account query if amm_info RPC fails (CLIO bug).
+    """
     if not currency:
         currency = get_currency(symbol)
+    
+    # Try amm_info RPC first
     result = _rpc("amm_info", {
         "asset":  {"currency": "XRP"},
         "asset2": {"currency": currency, "issuer": issuer},
     })
     if result and result.get("status") == "success":
         return result.get("amm")
+    
+    # Fallback: try reverse asset order (token/XRP instead of XRP/token)
+    result2 = _rpc("amm_info", {
+        "asset":  {"currency": currency, "issuer": issuer},
+        "asset2": {"currency": "XRP"},
+    })
+    if result2 and result2.get("status") == "success":
+        return result2.get("amm")
+    
+    # Final fallback: find AMM by checking issuer's account_info for AMMID
+    # Some AMMs have the issuer account itself as the AMM account
+    try:
+        info_resp = _rpc("account_info", {"account": issuer})
+        if info_resp and isinstance(info_resp, dict):
+            # _rpc returns data["result"] directly, so account_data is at top level
+            account_data = info_resp.get("account_data", {})
+            amm_id = account_data.get("AMMID")
+            if amm_id:
+                # Issuer IS the AMM! Query its balances directly
+                xrp_drops = int(account_data.get("Balance", 0))
+                
+                # Get token balance from issuer's trustlines
+                lines_resp = _rpc("account_lines", {"account": issuer})
+                token_bal = 0
+                if lines_resp and isinstance(lines_resp, dict):
+                    for line in lines_resp.get("lines", []):
+                        if line.get("currency") == currency:
+                            # For AMM-as-issuer, the token balance is what the AMM holds
+                            token_bal = abs(float(line.get("balance", 0)))
+                            break
+                
+                if token_bal > 0 and xrp_drops > 0:
+                    logger.debug(f"AMM fallback found for {symbol}: XRP={xrp_drops/1e6:.2f}, Tokens={token_bal:.2f}")
+                    # Return synthetic AMM dict matching amm_info format
+                    return {
+                        "amount": str(xrp_drops),
+                        "amount2": {
+                            "currency": currency,
+                            "issuer": issuer,
+                            "value": str(token_bal)
+                        },
+                        "lp_token": {"value": "0"},
+                    }
+    except Exception as e:
+        logger.debug(f"AMM fallback query failed for {symbol}: {e}")
+        pass
+    
     return None
 
 

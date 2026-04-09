@@ -310,24 +310,38 @@ def fire(symbol: str, currency: str, issuer: str,
         logger.info(f"RT sniper: {symbol} TVL={tvl_xrp:.0f} XRP too thin — skip")
         return False
 
-    # ── Gate 7: verify AMM exists and has liquidity (prevent tecPATH_DRY) ─
+    # ── Gate 7: verify liquidity exists (AMM or CLOB) ─────────────────────
     try:
         import scanner as _sc
         _p, _t, _src, _amm_id = _sc.get_token_price_and_tvl(symbol, issuer)
-        # Must have a valid AMM source — CLOB-only tokens will fail Payment tx
-        if _src != "amm" or not _amm_id:
-            logger.info(f"🚫 RT sniper: {symbol} no active AMM found (source={_src}) — skip")
+        
+        if _src == "amm" and _amm_id:
+            # AMM exists — verify it has enough XRP liquidity
+            from xrpl.clients import JsonRpcClient
+            from xrpl.models import AccountInfo as _AI
+            _cli = JsonRpcClient("https://rpc.xrplclaw.com")
+            _ai_resp = _cli.request(_AI(account=_amm_id))
+            if not _ai_resp.result.get("account_data"):
+                logger.info(f"🚫 RT sniper: {symbol} AMM account {_amm_id[:8]}... does not exist — skip")
+                return False
+            
+            # Check AMM pool balances via book_offers or direct query
+            # For now, trust the TVL from scanner (it already queries pool state)
+            if _t and _t < 50:  # Less than 50 XRP in pool = too thin
+                logger.info(f"🚫 RT sniper: {symbol} AMM pool too thin ({_t:.0f} XRP) — skip")
+                return False
+        elif _src == "clob":
+            # CLOB-only token — allow but warn (Payment may still work via order book)
+            logger.info(f"⚠️  RT sniper: {symbol} is CLOB-only (no AMM) — proceeding with caution")
+            # CLOB tokens need sufficient order book depth
+            # For now, allow if TVL > 100 XRP (already passed Gate 6)
+        else:
+            # No liquidity source found
+            logger.info(f"🚫 RT sniper: {symbol} no liquidity found (source={_src}) — skip")
             return False
-        # Verify AMM account actually exists on-chain
-        from xrpl.clients import JsonRpcClient
-        from xrpl.models import AccountInfo as _AI
-        _cli = JsonRpcClient("https://rpc.xrplclaw.com")
-        _ai_resp = _cli.request(_AI(account=_amm_id))
-        if not _ai_resp.result.get("account_data"):
-            logger.info(f"🚫 RT sniper: {symbol} AMM account {_amm_id[:8]}... does not exist — skip")
-            return False
-    except Exception:
-        pass  # If we can't verify, proceed anyway (don't block on RPC errors)
+    except Exception as e:
+        logger.warning(f"RT sniper: liquidity check error for {symbol}: {e} — proceeding anyway")
+        pass  # Don't block on RPC errors
 
     # ── All gates passed — FIRE ───────────────────────────────────────────
     size = _get_size(signal_type, tvl_xrp, wallet_balance)
