@@ -17,14 +17,19 @@ REGIME_FILE = os.path.join(STATE_DIR, "regime.json")
 
 def detect_regime(bot_state: Dict, candidates_above_70: int = 0) -> str:
     """
-    Determine market regime from performance metrics and scan results.
-    Returns: 'hot' | 'neutral' | 'cold' | 'danger'
+    Regime detection — DISABLED for live trading (Apr 9 2026).
+    Set REGIME_ENABLED = True to re-enable the cold/danger logic.
+    When disabled: always returns neutral — bot trades at full signal quality.
     """
+    REGIME_ENABLED = False  # ← True to re-enable
+
+    if not REGIME_ENABLED:
+        return "neutral"
+
     perf = bot_state.get("performance", {})
     cons_loss  = perf.get("consecutive_losses", 0)
     total      = perf.get("total_trades", 0)
 
-    # Use RECENT win rate (last 15 trades) not all-time — avoids old losses poisoning regime
     history = bot_state.get("trade_history", [])
     recent  = history[-15:] if len(history) >= 15 else history
     if len(recent) >= 5:
@@ -33,19 +38,12 @@ def detect_regime(bot_state: Dict, candidates_above_70: int = 0) -> str:
     else:
         win_rate = perf.get("win_rate", 0.5)
 
-    # Need at least 15 trades for regime to be meaningful — less than that is noise
     if total < 15:
         return "neutral"
-
-    # Danger: 10+ consecutive losses
     if cons_loss >= 10:
         return "danger"
-
-    # Cold: low recent win rate
     if win_rate < 0.35:
         return "cold"
-
-    # Hot: high win rate + at least one strong candidate
     if win_rate > 0.60 and candidates_above_70 >= 1:
         return "hot"
 

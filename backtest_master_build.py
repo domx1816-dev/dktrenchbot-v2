@@ -27,7 +27,7 @@ tradeable = [t for t in all_tokens if t.get("tvl_xrp", 0) >= 200]
 print(f"Tokens: {len(all_tokens)} total | {len(tradeable)} tradeable")
 
 # ── MASTER BUILD CONFIG (exact — Apr 8 2026 updates) ─────────────────────────
-STARTING_BALANCE = 197.0
+STARTING_BALANCE = 200.0
 SIM_DAYS = 14
 HOURS = SIM_DAYS * 24
 

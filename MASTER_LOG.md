@@ -327,3 +327,47 @@ BACKTEST v2 RESULTS — 2026-04-08 21:45 UTC
 3. Score 50-54 band has most trades (266) but only 41% WR — saturation effect?
 
 *Last updated: 2026-04-08 21:45 UTC*
+
+─────────────────────────────────────────────
+UPDATE: brain.py Unified Decision Engine
+Commit: c4b02e0 | 2026-04-08 23:40 UTC
+─────────────────────────────────────────────
+
+ARCHITECTURE CHANGE:
+  OLD: learn_engine.py (fragmented) + execution_core.py (bloated)
+  NEW: brain.py (unified intelligence) + execution_core.py (dumb execution)
+
+FILES CHANGED:
+  brain.py          — NEW (350 lines) — single source of truth
+  learn_engine.py   — DELETED (merged into brain.py)
+  execution_core.py — REFACTORED (165 lines, delegates to brain)
+  bot.py            — REFACTORED (learn_engine → brain)
+
+brain.py CONTAINS:
+  - Strategy weighting + capital allocation (capital_allocation per strategy)
+  - Slippage prediction (predict_slippage — was duplicated in 3 places)
+  - Pool safety + memory (pool_memory: rug_signals, volatility tracking)
+  - Route selection (select_best_route based on rolling slippage scores)
+  - Position sizing (position_sizer with strategy base risk, confidence mult, drawdown protection)
+  - Pre-trade validation gates (pre_trade_validator — ALL safety checks in one place)
+  - Execution stats (update_execution_stats per route)
+  - Global state persisted: strategy_stats, execution_stats, capital_allocation, pool_memory
+
+INTEGRATION POINTS IN bot.py:
+  Line 788-790: brain.select_best_route() + brain.update_execution_stats()
+  Line 1211-1215: brain.is_pool_safe() + brain.adjust_size_for_strategy()
+  Line 1380: brain.predict_slippage() — slippage tolerance
+  Line 1808: brain.update_after_trade() — after every closed trade
+
+execution_core.py NOW:
+  - Pure transaction submission only
+  - split_execute() for 40/60 split entries
+  - Delegates ALL intelligence checks to brain.pre_trade_validator()
+  - Backward compatible: re-exports brain.MAX_SLIPPAGE, MIN_CONFIDENCE, etc.
+
+BACKWARD COMPATIBILITY:
+  - execution_core.position_sizer() still callable — wraps brain.position_sizer()
+  - execution_core.pre_trade_validator() still callable — wraps brain.pre_trade_validator()
+  - All other modules importing execution_core are unaffected
+
+CONFIG.PY unchanged — no config changes needed.
