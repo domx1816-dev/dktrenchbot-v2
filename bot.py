@@ -1165,7 +1165,7 @@ def run_cycle(bot_state: Dict) -> Dict:
                 # Pre-breakout score gate: ≥45 required (backtest best WR tier)
                 _chart = candidate.get("chart_state", chart_state)
                 if _chart == "pre_breakout" and total_score < 45:
-                    logger.info(f"SKIP {symbol}: pre_breakout score={total_score} < 45 gate — backtest data requires ≥45 for WR")
+                    logger.info(f"SKIP {symbol}: pre_breakout score={total_score} < 42 gate — backtest 42-44 band has 60% WR")
                     continue
 
                 # ── MEMECOIN FILTER — strict XRPL meme-only gate ─────────────

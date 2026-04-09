@@ -29,7 +29,7 @@ POLL_INTERVAL_SEC = 1
 # score well but are already discovered and don't move.
 # Strategy: accept lower-scoring tokens (real runners), reject high-score stales.
 SCORE_ELITE        = 50    # 50+ → elite size — DATA shows this is the real sweet spot
-SCORE_TRADEABLE    = 45    # 45+ → normal entry — GodMode audit: classifier layer guards quality now
+SCORE_TRADEABLE    = 42    # 42+ → normal entry — backtest showed 42-44 band has 60% WR (best performing)
 SCORE_SMALL        = 999   # DISABLED — no small band, use scalp mode instead
 PREFERRED_CHART_STATES = {"pre_breakout"}  # only state with runners — data confirmed
 
