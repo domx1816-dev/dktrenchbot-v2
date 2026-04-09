@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DKTrenchBot v2 — Dashboard</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Courier New', monospace;
+      background: #0a0a0f;
+      color: #e0e0e0;
+      padding: 20px;
+      line-height: 1.6;
+    }
+    h1 {
+      color: #00ff88;
+      font-size: 1.8em;
+      margin-bottom: 5px;
+    }
+    .subtitle {
+      color: #666;
+      font-size: 0.9em;
+      margin-bottom: 20px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+    .card {
+      background: #111118;
+      border: 1px solid #222;
+      border-radius: 6px;
+      padding: 15px;
+    }
+    .card h3 {
+      color: #00ff88;
+      font-size: 0.95em;
+      margin-bottom: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .metric {
+      display: inline-block;
+      margin-right: 25px;
+      margin-bottom: 8px;
+    }
+    .metric-label {
+      color: #888;
+      font-size: 0.8em;
+    }
+    .metric-value {
+      color: #fff;
+      font-size: 1.3em;
+      font-weight: bold;
+    }
+    .status-online { color: #00ff88; }
+    .status-offline { color: #ff4444; }
+    .status-paused { color: #ffaa00; }
+    .positive { color: #00ff88; }
+    .negative { color: #ff4444; }
+    .neutral { color: #888; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85em;
+    }
+    th {
+      text-align: left;
+      padding: 8px;
+      color: #666;
+      border-bottom: 1px solid #222;
+      font-weight: normal;
+      text-transform: uppercase;
+      font-size: 0.75em;
+    }
+    td {
+      padding: 8px;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    tr:hover {
+      background: #151520;
+    }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 3px;
+      font-size: 0.75em;
+      font-weight: bold;
+    }
+    .badge-fresh { background: #00ff8822; color: #00ff88; }
+    .badge-sustained { background: #0088ff22; color: #0088ff; }
+    .badge-late { background: #ff880022; color: #ff8800; }
+    .signal-line {
+      font-size: 0.8em;
+      color: #888;
+      padding: 3px 0;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    .last-updated {
+      color: #444;
+      font-size: 0.75em;
+      text-align: right;
+      margin-top: 20px;
+    }
+    @media (max-width: 768px) {
+      .grid { grid-template-columns: 1fr; }
+      .metric { display: block; margin-bottom: 12px; }
+    }
+  </style>
+</head>
+<body>
+  <h1>🤖 DKTrenchBot v2</h1>
+  <div class="subtitle">XRPL Meme Token Trading Bot — Live Dashboard</div>
+
+  <div class="grid">
+    <!-- Status Card -->
+    <div class="card" id="status-card">
+      <h3>System Status</h3>
+      <div id="status-content">Loading...</div>
+    </div>
+
+    <!-- Performance Card -->
+    <div class="card" id="perf-card">
+      <h3>Performance</h3>
+      <div id="perf-content">Loading...</div>
+    </div>
+
+    <!-- Safety Card -->
+    <div class="card" id="safety-card">
+      <h3>Safety Controller</h3>
+      <div id="safety-content">Loading...</div>
+    </div>
+  </div>
+
+  <!-- Recent Trades -->
+  <div class="card">
+    <h3>Recent Trades (Last 20)</h3>
+    <table id="trades-table">
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Token</th>
+          <th>Side</th>
+          <th>Entry</th>
+          <th>Exit</th>
+          <th>PnL</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div class="grid" style="margin-top: 15px;">
+    <!-- Top Candidates -->
+    <div class="card">
+      <h3>Top Candidates</h3>
+      <table id="candidates-table">
+        <thead>
+          <tr>
+            <th>Token</th>
+            <th>Score</th>
+            <th>TVL</th>
+            <th>Type</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <!-- Realtime Signals -->
+    <div class="card">
+      <h3>Realtime Signals</h3>
+      <div id="signals-content" style="max-height: 300px; overflow-y: auto;"></div>
+    </div>
+  </div>
+
+  <div class="last-updated" id="last-updated"></div>
+
+  <script>
+    // API base URL — change this to your deployed endpoint
+    const API_BASE = window.location.hostname === 'localhost' 
+      ? 'http://localhost:5001/api'
+      : '/api'; // When deployed behind Cloudflare Pages proxy
+
+    async function fetchJSON(endpoint) {
+      try {
+        const resp = await fetch(API_BASE + endpoint);
+        return await resp.json();
+      } catch (err) {
+        console.error(`Failed to fetch ${endpoint}:`, err);
+        return null;
+      }
+    }
+
+    function formatTime(ts) {
+      if (!ts) return 'N/A';
+      const d = new Date(ts * 1000);
+      return d.toLocaleTimeString('en-US', { hour12: false });
+    }
+
+    function formatXRP(val) {
+      return (val || 0).toFixed(2);
+    }
+
+    async function refresh() {
+      // Status
+      const status = await fetchJSON('/status');
+      if (status) {
+        const onlineClass = status.online ? 'status-online' : 'status-offline';
+        const onlineText = status.online ? '🟢 ONLINE' : '🔴 OFFLINE';
+        const pausedText = status.is_paused ? '<span class="status-paused">⏸️ PAUSED</span>' : '<span class="status-online">▶️ ACTIVE</span>';
+        
+        document.getElementById('status-content').innerHTML = `
+          <div class="metric">
+            <div class="metric-label">Status</div>
+            <div class="metric-value ${onlineClass}">${onlineText}</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Mode</div>
+            <div class="metric-value">${pausedText}</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Balance</div>
+            <div class="metric-value">${formatXRP(status.xrp_balance)} XRP</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Regime</div>
+            <div class="metric-value neutral">${status.regime}</div>
+          </div>
+        `;
+      }
+
+      // Performance
+      if (status && status.performance) {
+        const perf = status.performance;
+        const pnlClass = perf.total_pnl_xrp >= 0 ? 'positive' : 'negative';
+        document.getElementById('perf-content').innerHTML = `
+          <div class="metric">
+            <div class="metric-label">Win Rate</div>
+            <div class="metric-value">${(perf.win_rate * 100).toFixed(1)}%</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Total PnL</div>
+            <div class="metric-value ${pnlClass}">${formatXRP(perf.total_pnl_xrp)} XRP</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Trades</div>
+            <div class="metric-value">${perf.total_trades}</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Consec Losses</div>
+            <div class="metric-value ${perf.consecutive_losses > 0 ? 'negative' : ''}">${perf.consecutive_losses}</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Open Positions</div>
+            <div class="metric-value">${perf.open_positions}</div>
+          </div>
+        `;
+      }
+
+      // Safety
+      const safety = await fetchJSON('/safety');
+      if (safety) {
+        document.getElementById('safety-content').innerHTML = `
+          <div class="metric">
+            <div class="metric-label">Paused</div>
+            <div class="metric-value ${safety.is_paused ? 'status-paused' : 'status-online'}">
+              ${safety.is_paused ? 'YES' : 'NO'}
+            </div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">Emergency Stop</div>
+            <div class="metric-value ${safety.is_stopped ? 'status-offline' : 'status-online'}">
+              ${safety.is_stopped ? 'ACTIVE' : 'CLEAR'}
+            </div>
+          </div>
+          ${safety.pause_reason ? `<div style="margin-top: 10px; color: #ffaa00; font-size: 0.85em;">Reason: ${safety.pause_reason}</div>` : ''}
+        `;
+      }
+
+      // Trades
+      const tradesData = await fetchJSON('/trades');
+      if (tradesData && tradesData.trades) {
+        const tbody = document.querySelector('#trades-table tbody');
+        if (tradesData.trades.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#666;">No trades yet</td></tr>';
+        } else {
+          tbody.innerHTML = tradesData.trades.map(t => {
+            const pnlClass = (t.pnl_xrp || 0) >= 0 ? 'positive' : 'negative';
+            return `
+              <tr>
+                <td>${formatTime(t.timestamp)}</td>
+                <td>${t.symbol || 'N/A'}</td>
+                <td>${(t.side || '').toUpperCase()}</td>
+                <td>${formatXRP(t.entry_price)}</td>
+                <td>${formatXRP(t.exit_price)}</td>
+                <td class="${pnlClass}">${formatXRP(t.pnl_xrp)} XRP</td>
+              </tr>
+            `;
+          }).join('');
+        }
+      }
+
+      // Candidates
+      const cands = await fetchJSON('/candidates');
+      if (cands) {
+        const allCands = [
+          ...cands.fresh_momentum.map(c => ({...c, type: 'fresh'})),
+          ...cands.sustained_momentum.map(c => ({...c, type: 'sustained'})),
+          ...cands.late_extension.map(c => ({...c, type: 'late'}))
+        ].slice(0, 10);
+
+        const tbody = document.querySelector('#candidates-table tbody');
+        if (allCands.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:#666;">No candidates</td></tr>';
+        } else {
+          tbody.innerHTML = allCands.map(c => {
+            const badgeClass = c.type === 'fresh' ? 'badge-fresh' : c.type === 'sustained' ? 'badge-sustained' : 'badge-late';
+            return `
+              <tr>
+                <td>${c.symbol}</td>
+                <td>${(c.score || 0).toFixed(1)}</td>
+                <td>${(c.tvl_xrp || 0).toFixed(0)} XRP</td>
+                <td><span class="badge ${badgeClass}">${c.type}</span></td>
+              </tr>
+            `;
+          }).join('');
+        }
+      }
+
+      // Realtime signals
+      const realtime = await fetchJSON('/realtime');
+      if (realtime && realtime.signals) {
+        document.getElementById('signals-content').innerHTML = realtime.signals
+          .map(s => `<div class="signal-line">${s}</div>`)
+          .join('');
+      }
+
+      // Update timestamp
+      document.getElementById('last-updated').textContent = 
+        `Last updated: ${new Date().toLocaleTimeString('en-US', {hour12: false})}`;
+    }
+
+    // Initial load
+    refresh();
+    
+    // Auto-refresh every 10 seconds
+    setInterval(refresh, 10000);
+  </script>
+</body>
+</html>
