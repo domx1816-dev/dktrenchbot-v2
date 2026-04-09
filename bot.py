@@ -1651,24 +1651,27 @@ def run_cycle(bot_state: Dict) -> Dict:
             # Top-holder buying check via safety module
             safety_result = safety.check_token(symbol, issuer)
             warnings = safety_result.get("warnings", [])
-            # Concentration risk: penalty not block — top holder may be supply control (PHX pattern)
-            # Extract top holder % from warning and apply graduated score penalty
+            # Concentration risk: XRPL meme tokens often split supply across wallets
+            # for legitimate reasons (LP provisioning, marketing, vesting).
+            # Only penalize extreme concentration (>50%), block at >70%.
             conc_penalty = 0
             for w in warnings:
-                if "concentration_risk" in w:
+                if "top_holder" in w and "%" in w:
                     try:
                         pct = float(w.split("top_holder:")[1].split("%")[0])
                         if pct >= 70:
-                            conc_penalty = 12
+                            # Extreme concentration — heavy penalty (but safety.py already blocked)
+                            conc_penalty = 15
+                            logger.info(f"  ⚠️  {symbol}: EXTREME concentration {pct:.0f}% → score penalty -{conc_penalty}")
                         elif pct >= 50:
-                            conc_penalty = 9
-                        elif pct >= 40:
+                            # High but acceptable for XRPL memes (supply control pattern)
                             conc_penalty = 5
+                            logger.info(f"  ℹ️  {symbol}: high concentration {pct:.0f}% (acceptable for XRPL memes) → penalty -{conc_penalty}")
                         else:
-                            conc_penalty = 2
-                        logger.info(f"  ⚠️  {symbol}: concentration {pct:.0f}% → score penalty -{conc_penalty}")
+                            # Normal range, no penalty
+                            conc_penalty = 0
                     except:
-                        conc_penalty = 8
+                        conc_penalty = 3
             total_score = max(0, total_score - conc_penalty)
 
             # ── Wallet Intelligence (Horizon-style on-chain analysis) ─────────

@@ -148,8 +148,16 @@ def check_freeze_risk(issuer: str) -> Tuple[bool, str]:
 
 def check_concentration(issuer: str, symbol: str) -> Tuple[bool, str]:
     """
-    Rough concentration check. Returns (ok, reason).
-    Checks gateway_balances to see largest single holder.
+    XRPL meme token concentration check.
+    
+    Key insight: On XRPL, teams often split supply across multiple wallets for:
+    - Liquidity provisioning (pre-AMM or multi-pool)
+    - Marketing/airdrop allocations  
+    - Team vesting schedules
+    - Exchange listing preparations
+    
+    This is a legitimate pattern, NOT necessarily a rug risk.
+    We only flag extreme concentration (>70%) as high risk.
     """
     currency = get_currency(symbol)
     result = _rpc("gateway_balances", {
@@ -201,8 +209,15 @@ def check_concentration(issuer: str, symbol: str) -> Tuple[bool, str]:
 
     max_bal = max(b for b, _ in balances_filtered)
     pct = (max_bal / real_total * 100)
-    if pct > 30:
-        return False, f"top_holder:{pct:.1f}%>30%"
+    
+    # XRPL meme token thresholds:
+    # >70% = extreme concentration, likely rug risk → BLOCK
+    # 50-70% = high concentration, apply score penalty but don't block
+    # <50% = acceptable for meme tokens (supply control pattern)
+    if pct > 70:
+        return False, f"top_holder:{pct:.1f}%>70%"
+    elif pct > 50:
+        return True, f"top_holder:{pct:.1f}%_high_but_acceptable"
     return True, f"top_holder:{pct:.1f}%"
 
 
