@@ -597,3 +597,62 @@ BOT STATUS AFTER SESSION:
   - Burst/CLOB candidates: NOW REACH SCORING (were silently dropped)
   - GitHub: needs push
 ═══════════════════════════════════════════════════════════════
+
+═══════════════════════════════════════════════════════════════
+SESSION: Apr 9 2026 — Smart Cluster Audit & MEV Protection
+═══════════════════════════════════════════════════════════════
+
+PROBLEM DISCOVERED:
+  smart_cluster signal in realtime_sniper.py was copy-trading two wallets
+  (raRBY29mxKf8oADemdUg5618xL6m5RhMLP, r3QxBXQs2XZ9oMPLsjB2fkFgKTcxC5TRMq)
+  that turned out to be MEV/sandwich bots — buying and selling within 39 seconds.
+
+DAMAGE:
+  - 21 successful smart_cluster entries fired today
+  - 126 XRP total spent
+  - 0 confirmed wins
+  - Affected tokens: STEVE, RPR, Horizon, HIYO, ARMY, TOTO, TAGZ, TriForce, etc.
+  - RPR manually sold to recover ~14.86 XRP (entered at 15 XRP)
+  - STEVE auto-sold by reconcile for dust on restart
+
+ROOT CAUSE:
+  - wallet_cluster.py correctly emits cluster alerts for data/scoring use
+  - realtime_sniper.py had _on_cluster_alert callback in bot.py that triggered
+    immediate trades purely on cluster signal — no supporting signals required
+  - The two wallets buy dozens of tokens simultaneously (spray-and-pray MEV bots)
+    then exit within seconds
+
+FIXES APPLIED:
+
+1. SMART CLUSTER COPY-TRADE DISABLED (bot.py)
+   - _on_cluster_alert callback now returns immediately (early exit)
+   - Wallet cluster data still flows into scoring.py as +30 pt boost
+   - Cluster can SUPPORT a trade but cannot TRIGGER one
+   - Wallets remain tracked — they are legitimate data sources
+
+2. MEV DETECTION ADDED (wallet_cluster.py)
+   - Now tracks both BUY and SELL transactions per wallet per token
+   - Detects sells via Payment (SendMax=token, Amount=XRP) and OfferCreate (TakerPays=token, TakerGets=XRP)
+   - Wallets holding a token < 120 seconds = MEV exit flagged
+   - After 2+ fast exits within 1 hour → wallet flagged as MEV for 60 minutes
+   - MEV-flagged wallets contribute 0 to cluster score boost
+   - Legit wallets (holding >120s) still contribute full +30 boost
+
+ARCHITECTURE CLARIFICATION:
+  - wallet_cluster role: support signal only — TVL confirmation, score boost, context
+  - wallet_cluster role: NOT a trade trigger under any circumstances
+  - Correct flow: token scores 45 + smart wallets entered = 75 → buy ✅
+  - Blocked flow: smart wallets entered alone (no other signals) → skip ✅
+
+LEARNING:
+  MEV bots on XRPL often cluster-buy many tokens simultaneously to probe for
+  sandwich opportunities. They look like "smart money" in the data stream but
+  exit in seconds. Always require independent signal confirmation before acting
+  on wallet cluster data.
+
+BOT STATUS AFTER SESSION:
+  - Balance: ~65 XRP (multiple open positions from cluster trades still held)
+  - smart_cluster copy-trade: DISABLED
+  - MEV protection: LIVE
+  - Wallet tracking: INTACT (data value preserved)
+═══════════════════════════════════════════════════════════════

@@ -157,3 +157,27 @@ GitHub:             https://github.com/domx1816-dev/dktrenchbot-v2
 ---
 
 *DKTrenchBot v2 — Built on XRPLClaw.com*
+
+---
+
+## Apr 9 2026 — Smart Cluster Audit & MEV Protection
+
+### Smart Cluster Copy-Trade — DISABLED
+- `_on_cluster_alert` callback in `bot.py` now returns immediately (early exit)
+- Wallet cluster data remains active for **score boost only (+30 pts)**
+- Cluster can support a trade but **cannot trigger one**
+- Correct role: if token scores 45 + smart wallets entered = 75 → buy ✅
+- Blocked: cluster alone (burst=0, no TrustSets) → skip ✅
+
+### MEV Wallet Detection (wallet_cluster.py)
+- Tracks **both buy and sell** transactions per wallet per token
+- Sell detection: Payment (SendMax=token, Amount=XRP) + OfferCreate (TakerPays=token, TakerGets=XRP)
+- Hold < 120 seconds = MEV exit flagged
+- 2+ fast exits within 1 hour → wallet flagged as MEV for 60 min
+- MEV-flagged wallets contribute **0 to cluster boost**
+- Legitimate wallets (holding >120s) retain full +30 boost
+
+### Damage from today (pre-fix)
+- 126 XRP spent across 21 smart_cluster sniper fires
+- 0 confirmed wins — spray-and-pray MEV bots mimicking smart money
+- RPR manually cut, STEVE reconcile-sold

@@ -39,6 +39,11 @@ ENTRY_TTL_SEC = 600  # 10 minutes
 # Minimum wallets to trigger cluster alert
 CLUSTER_THRESHOLD = 2
 
+# MEV detection: wallets that exit a token within this many seconds of entry are flagged as MEV/sandwich bots
+MEV_EXIT_WINDOW_SEC = 120
+# How long to remember a wallet's MEV behaviour before re-evaluating
+MEV_MEMORY_SEC = 3600  # 1 hour
+
 # Reconnect delay (seconds)
 RECONNECT_DELAY = 5
 
@@ -49,12 +54,15 @@ class WalletClusterMonitor:
     def __init__(self):
         self._ws: Optional[websocket.WebSocketApp] = None
         self._running = False
-        self._token_wallet_map: Dict[str, Dict[str, float]] = {}  # token -> {wallet: ts}
+        self._token_wallet_map: Dict[str, Dict[str, float]] = {}  # token -> {wallet: entry_ts}
         self._cluster_alerts: List[Dict] = []
         self._known_wallets: Set[str] = set()
         self._lock = threading.Lock()
         self._bot_state_ref: Optional[dict] = None  # Reference to bot_state for signal injection
         self._on_alert_callback: Optional[Callable] = None
+        # MEV tracking: wallet -> list of (token_key, entry_ts, exit_ts)
+        self._mev_exits: Dict[str, List[tuple]] = {}  # wallet -> [(token, entry_ts, exit_ts)]
+        self._mev_flagged: Dict[str, float] = {}  # wallet -> ts when flagged
 
     def load_known_wallets(self) -> Set[str]:
         """Load tracked wallets from config and discovered_wallets.json."""
@@ -94,6 +102,40 @@ class WalletClusterMonitor:
                 # Remove empty tokens
                 if not self._token_wallet_map[token]:
                     del self._token_wallet_map[token]
+
+    def _is_mev_wallet(self, wallet: str) -> bool:
+        """Return True if wallet has been flagged as MEV/sandwich bot recently."""
+        now = time.time()
+        flagged_ts = self._mev_flagged.get(wallet, 0)
+        return now - flagged_ts < MEV_MEMORY_SEC
+
+    def _record_wallet_exit(self, wallet: str, token_key: str):
+        """Record a wallet exiting a token. Flag as MEV if exit is very fast."""
+        now = time.time()
+        with self._lock:
+            entry_ts = self._token_wallet_map.get(token_key, {}).get(wallet, 0)
+            if entry_ts and (now - entry_ts) < MEV_EXIT_WINDOW_SEC:
+                hold_sec = now - entry_ts
+                if wallet not in self._mev_exits:
+                    self._mev_exits[wallet] = []
+                self._mev_exits[wallet].append((token_key, entry_ts, now))
+                # Keep last 20 exits per wallet
+                self._mev_exits[wallet] = self._mev_exits[wallet][-20:]
+                # Flag wallet if it has 2+ fast exits recently
+                recent_fast = [
+                    e for e in self._mev_exits[wallet]
+                    if now - e[1] < MEV_MEMORY_SEC
+                ]
+                if len(recent_fast) >= 2:
+                    if wallet not in self._mev_flagged or now - self._mev_flagged[wallet] > MEV_MEMORY_SEC:
+                        logger.warning(
+                            f"⚠️ MEV WALLET FLAGGED: {wallet[:10]}... — {len(recent_fast)} fast exits "
+                            f"(held {hold_sec:.0f}s on {token_key[:8]}). Cluster boost suppressed for 1hr."
+                        )
+                    self._mev_flagged[wallet] = now
+            # Remove from entry map on exit
+            if token_key in self._token_wallet_map and wallet in self._token_wallet_map[token_key]:
+                del self._token_wallet_map[token_key][wallet]
 
     def _record_wallet_entry(self, wallet: str, token_key: str):
         """Record a wallet entering a token."""
@@ -192,37 +234,51 @@ class WalletClusterMonitor:
                 if account not in self._known_wallets:
                     return
 
-                # Detect token purchases via Payment or OfferCreate
+                # Detect token purchases and sells via Payment or OfferCreate
                 if tx_type == "Payment":
                     amount = tx_data.get("Amount", {})
+                    send_max = tx_data.get("SendMax", {})
                     destination = tx_data.get("Destination", "")
 
-                    # If the payment is a token (not XRP), record it
-                    if isinstance(amount, dict):
+                    # BUY: Amount=token (dict), SendMax=XRP (str) — self-payment AMM buy
+                    if isinstance(amount, dict) and isinstance(send_max, str):
                         currency = amount.get("currency", "")
                         issuer = amount.get("issuer", "")
                         if currency and issuer:
                             token_key = f"{currency}:{issuer}"
                             self._record_wallet_entry(account, token_key)
-                            logger.info(
-                                f"  📥 {account[:10]}... bought {currency[:8]} via Payment"
-                            )
+                            logger.info(f"  📥 {account[:10]}... bought {currency[:8]} via Payment")
+
+                    # SELL: Amount=XRP (str), SendMax=token (dict)
+                    elif isinstance(amount, str) and isinstance(send_max, dict):
+                        currency = send_max.get("currency", "")
+                        issuer = send_max.get("issuer", "")
+                        if currency and issuer:
+                            token_key = f"{currency}:{issuer}"
+                            self._record_wallet_exit(account, token_key)
+                            logger.info(f"  📤 {account[:10]}... sold {currency[:8]} via Payment")
 
                 elif tx_type == "OfferCreate":
-                    # Detect buy offers: TakerPays=XRP, TakerGets=token
                     tp = tx_data.get("TakerPays", {})
                     tg = tx_data.get("TakerGets", {})
 
-                    # Buying token: paying XRP (string), getting token (dict)
+                    # BUY: paying XRP (string), getting token (dict)
                     if isinstance(tp, str) and isinstance(tg, dict):
                         currency = tg.get("currency", "")
                         issuer = tg.get("issuer", "")
                         if currency and issuer:
                             token_key = f"{currency}:{issuer}"
                             self._record_wallet_entry(account, token_key)
-                            logger.info(
-                                f"  📥 {account[:10]}... bought {currency[:8]} via OfferCreate"
-                            )
+                            logger.info(f"  📥 {account[:10]}... bought {currency[:8]} via OfferCreate")
+
+                    # SELL: paying token (dict), getting XRP (string)
+                    elif isinstance(tp, dict) and isinstance(tg, str):
+                        currency = tp.get("currency", "")
+                        issuer = tp.get("issuer", "")
+                        if currency and issuer:
+                            token_key = f"{currency}:{issuer}"
+                            self._record_wallet_exit(account, token_key)
+                            logger.info(f"  📤 {account[:10]}... sold {currency[:8]} via OfferCreate")
 
             elif data.get("type") == "ledgerClosed":
                 # Periodic cleanup on ledger close
@@ -339,8 +395,18 @@ class WalletClusterMonitor:
             wallets_ts = self._token_wallet_map.get(token_key, {})
             active_count = sum(1 for ts in wallets_ts.values() if now - ts < ENTRY_TTL_SEC)
 
-        if active_count >= CLUSTER_THRESHOLD:
-            return 30  # Significant boost
+        # Only count non-MEV wallets toward boost
+        with self._lock:
+            wallets_ts = self._token_wallet_map.get(token_key, {})
+            legit_count = sum(
+                1 for w, ts in wallets_ts.items()
+                if now - ts < ENTRY_TTL_SEC and not self._is_mev_wallet(w)
+            )
+
+        if legit_count >= CLUSTER_THRESHOLD:
+            return 30  # Significant boost — 2+ non-MEV smart wallets holding
+        elif active_count >= CLUSTER_THRESHOLD:
+            return 0   # Cluster exists but wallets are MEV-flagged — no boost
         return 0
 
 

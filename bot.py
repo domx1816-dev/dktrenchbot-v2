@@ -2187,7 +2187,8 @@ def startup(bot_state: Dict) -> Dict:
     # ── Wallet Cluster Monitor (Audit #2) ─────────────────────────────────────
     try:
         def _on_cluster_alert(alert: dict):
-            """Realtime sniper callback — fires immediately on smart wallet cluster."""
+            """Realtime sniper callback — DISABLED: smart_cluster signal showed 0 wins, spray-and-pray wallets."""
+            return  # DISABLED Apr 9 2026 — false signal, same 2 wallets buying everything indiscriminately
             try:
                 import realtime_sniper
                 import scanner as _sc
