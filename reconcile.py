@@ -162,9 +162,16 @@ def reconcile(bot_state: Dict, cancel_stale_hours: float = 2.0) -> Dict:
         try:
             from execution import sell_token
             import scanner as _sc
-            _live_price, _, _, _ = _sc.get_token_price_and_tvl(currency, issuer)
+            _live_price, _live_tvl, _source, _amm = _sc.get_token_price_and_tvl(currency, issuer)
             if not _live_price:
-                _log(f"⚠️  Cannot fetch live price for {chain_key} — skipping orphan sell")
+                _log(f"⚠️  Cannot fetch live price for {chain_key} — skipping orphan sell (dead pool)")
+                continue
+            # Skip if AMM is dead (TVL < 10 XRP) — tecKILLED guaranteed, wastes fees
+            _amm_tvl = float(_live_tvl or 0)
+            if _amm_tvl < 10:
+                _log(f"⚠️  Dead pool TVL={_amm_tvl:.1f} XRP for {chain_key} — skipping sell, would tecKILLED")
+                orphans = bot_state.setdefault("orphan_positions", {})
+                orphans[currency] = {"tokens": balance, "issuer": issuer, "currency": currency, "ts": time.time(), "dead_pool": True}
                 continue
             sell_result = sell_token(
                 symbol         = currency,
