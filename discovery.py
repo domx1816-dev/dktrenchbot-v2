@@ -30,7 +30,7 @@ DISCOVERY_LOG   = os.path.join(STATE_DIR, "discovery.log")
 MAX_TOKENS = 200
 
 # TVL threshold for inclusion (XRP)
-DISCOVERY_TVL_MIN = 0
+DISCOVERY_TVL_MIN = 400   # operator sweet spot: ghost/micro/small tiers only ($400+ MC floor)
 
 os.makedirs(STATE_DIR, exist_ok=True)
 

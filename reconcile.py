@@ -164,14 +164,17 @@ def reconcile(bot_state: Dict, cancel_stale_hours: float = 2.0) -> Dict:
             import scanner as _sc
             _live_price, _live_tvl, _source, _amm = _sc.get_token_price_and_tvl(currency, issuer)
             if not _live_price:
-                _log(f"⚠️  Cannot fetch live price for {chain_key} — skipping orphan sell (dead pool)")
+                _log(f"⚠️  Cannot fetch live price for {chain_key} — skipping orphan sell")
                 continue
-            # Skip if AMM is dead (TVL < 10 XRP) — tecKILLED guaranteed, wastes fees
-            _amm_tvl = float(_live_tvl or 0)
-            if _amm_tvl < 10:
-                _log(f"⚠️  Dead pool TVL={_amm_tvl:.1f} XRP for {chain_key} — skipping sell, would tecKILLED")
+            # Skip dust positions — worth < 1 XRP drop = tecKILLED guaranteed.
+            # Note: memecoins on firstledger/xMagnetic always have live AMM pools.
+            # tecKILLED on sells = dust balance, NOT dead pool.
+            _worth_drops = _live_price * balance * 1_000_000
+            if _worth_drops < 1:
+                _log(f"⚠️  Dust position {chain_key} worth={_worth_drops:.6f} drops (<1 drop) — skip, flag for trustline close")
                 orphans = bot_state.setdefault("orphan_positions", {})
-                orphans[currency] = {"tokens": balance, "issuer": issuer, "currency": currency, "ts": time.time(), "dead_pool": True}
+                orphans[currency] = {"tokens": balance, "issuer": issuer, "currency": currency,
+                                     "ts": time.time(), "dust": True, "worth_drops": _worth_drops}
                 continue
             sell_result = sell_token(
                 symbol         = currency,
