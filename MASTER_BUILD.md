@@ -430,3 +430,25 @@ Key alignment fixes applied:
 3. AMM discovery: 4-method fallback chain (catches all memecoins)
 4. Concentration check: 30% → 70% (XRPL meme supply control pattern)
 5. Module cleanup: Removed 15 dead files (~38K lines)
+
+---
+
+## RPC Reliability Fix — April 9, 2026 (23:30 UTC)
+
+### Problem
+CLIO RPC returns `notReady` errors under load, causing AMM price lookups to fail. Tokens with valid AMMs were being skipped because the bot couldn't fetch prices.
+
+### Solution
+Enhanced retry logic in `_rpc()` functions:
+- **Retry attempts**: 3 → 5
+- **Retry conditions**: Added `notReady` alongside `slowDown`
+- **Backoff strategy**: Linear → Exponential (1s, 2s, 4s, 8s, 16s)
+- **Timeout**: 12s → 15s
+
+### Files Changed
+- `scanner.py` — Core scanner RPC calls
+- `xrpl_amm_discovery.py` — Discovery module RPC calls
+- `rpc_utils.py` — NEW shared utility (future consolidation)
+
+### Result
+AMM lookups now succeed even during RPC overload, enabling proper token scoring and trade execution.

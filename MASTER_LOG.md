@@ -930,3 +930,34 @@ With corrected score thresholds (42+), bot should match backtest v2 performance:
 - **Net P&L**: +2,500 to +3,000 XRP
 
 *Build finalized at 21:27 UTC, April 9, 2026*
+
+---
+
+## April 9, 2026 — 23:30 UTC — RPC Reliability Fix
+
+### Issue
+CLIO RPC endpoint returns `notReady` errors when overloaded, causing AMM price lookups to fail. This resulted in valid tokens (TOW, TRVL, PHX) being skipped because the bot couldn't fetch their prices.
+
+Previous retry logic only handled `slowDown` errors with linear backoff (1s, 2s, 3s), which wasn't sufficient for sustained RPC overload.
+
+### Fix Applied
+1. **Increased retry attempts**: 3 → 5 attempts
+2. **Added `notReady` to retry conditions**: Now retries on both `slowDown` AND `notReady` errors
+3. **Exponential backoff**: 1s, 2s, 4s, 8s, 16s (was linear)
+4. **Increased timeout**: 12s → 15s
+5. **Created `rpc_utils.py`**: Shared RPC utility for future module consolidation
+
+### Files Modified
+- `scanner.py` — `_rpc()` function updated with exponential backoff
+- `xrpl_amm_discovery.py` — `_rpc()` function updated with exponential backoff
+- `rpc_utils.py` — NEW: Centralized RPC utility (shared across modules)
+
+### Expected Impact
+- AMM lookups succeed even during RPC overload periods
+- Tokens with valid AMMs no longer skipped due to transient RPC failures
+- Bot can now score and execute trades that were previously blocked
+
+### Verification
+Tested with known tokens (PHX, TOW) — RPC calls now succeed after retry instead of returning None.
+
+*Commit: 3874dcd*
