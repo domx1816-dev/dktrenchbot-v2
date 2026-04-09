@@ -1,523 +1,110 @@
-# DKTrenchBot v2 — MASTER BUILD
-## Final Configuration — April 8, 2026
+# DKTrenchBot v2 — Master Build
+
+**Last Updated:** April 9, 2026  
+**Status:** LIVE  
+**Wallet:** rKQACag8Td9TrMxBwYJPGRMDV8cxGfKsmF  
+**Balance:** ~199.66 XRP  
+**Dashboard:** https://dktrenchbot.pages.dev
 
 ---
 
-## 🔐 SECURITY PATCH — Telegram Removed (Apr 8, 2026)
+## Architecture Overview
 
-**Severity:** Critical — hot wallet exposure via hardcoded TG bot token
-**Decision:** Operator opted to remove all Telegram code permanently
-
-### What changed
-| File | Change |
-|------|--------|
-| `tg_scanner_listener.py` | **DELETED** — had hardcoded TG token + chat discovery |
-| `tg_signal_listener.py` | **DELETED** — had hardcoded TG token |
-| `warden_security_patch.py` | Stripped TG functions → **RPC failover only** |
-| `amm_launch_watcher.py` | `send_tg()` removed, TG import removed, `rpc()` → `rpc_call()` |
-| `bot.py` | `tg_scanner_boost` removed from scoring |
-| `scoring.py` | `get_tg_signal_boost()` removed, TG signal scoring removed |
-| `state/tg_*.json` | Deleted stale state files |
-
-### RPC Failover (what replaced TG in warden_security_patch.py)
-```python
-RPC_ENDPOINTS = [
-    "https://rpc.xrplclaw.com",
-    "https://xrplcluster.com",
-    "https://s1.ripple.com:51234"
-]
-def rpc_call(method: str, params: dict, timeout: int = 10):
-    for url in RPC_ENDPOINTS:
-        try:
-            r = requests.post(url, json={"method": method, "params": [params]}, timeout=timeout)
-            if "result" in r.json(): return r.json()["result"]
-        except: continue
-    return {}
+```
+scan → pre_move_detector → classify → memecoin filter → disagree → strategy → size → execute → manage → learn
 ```
 
-### Security posture after patch
-- Bot wallet: **fully air-gapped from Telegram**
-- All scanning/monitoring: **on-chain only**
-- External comms: **none**
-- RPC: **failover enabled** (was single endpoint before)
-
-### Commit
-`c511272` — remove_all_telegram: purge TG listeners, strip TG from scoring/bot/amm_watcher
-
-This document is the canonical reference for the fully upgraded bot.
-Every file changed today is documented here in full.
+### Core Modules
+| Module | Role |
+|--------|------|
+| `bot.py` | Main loop, orchestration |
+| `scanner.py` | Price + TVL fetching, token discovery |
+| `trustset_watcher.py` | Real-time TrustSet burst detection |
+| `classifier.py` | Strategy classification (burst/clob/pre_breakout/trend/micro_scalp) |
+| `disagreement.py` | 6-check veto engine |
+| `scoring.py` | Token score 0-100 |
+| `execution.py` | Buy/sell via OfferCreate IOC |
+| `execution_core.py` | Retry, ghost-fill detection, orphan tracking |
+| `dynamic_tp.py` | Per-strategy TP ladders + trailing stops |
+| `dynamic_exit.py` | Exit management, stale exits, hard stops |
+| `sizing.py` | Position sizing, TVL-safe caps |
+| `pre_move_detector.py` | Pre-accumulation scanner ($400-$5k TVL window) |
+| `regime.py` | Market regime classification |
+| `safety.py` | Safety gate per candidate |
+| `smart_money.py` | Tracked wallet monitoring |
+| `wallet_cluster.py` | Cluster buy/sell detection |
+| `alpha_recycler.py` | Smart wallet exit monitoring |
+| `brain.py` | ML predictions, slippage forecasting |
 
 ---
 
-## Architecture
+## Pipeline Detail
 
-```
-XRPL Chain
-    │
-    ▼
-┌─────────────────────────────────────────────────────────┐
-│  SCAN LAYER                                             │
-│  scanner.py + trustset_watcher.py + realtime_watcher   │
-│  • 595 tokens scanned every 1 second                   │
-│  • TrustSet burst detected at 8+ TS/hr (was 15)        │
-│  • AMM + CLOB + wallet cluster signals merged           │
-└──────────────────────┬──────────────────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────────────────┐
-│  CLASSIFY LAYER  (classifier.py)                        │
-│  ONE primary type per token — no blending               │
-│  BURST       → 8+ TS/hr OR velocity>2.5               │
-│  CLOB_LAUNCH → age<180s + orderbook momentum           │
-│  PRE_BREAKOUT→ chart_state=pre_breakout, any TVL       │
-│  TREND       → TVL>200k + rising velocity              │
-│  MICRO_SCALP → TVL<2k + velocity>1.5                  │
-│                                                         │
-│  FAST PATH: BURST + CLOB_LAUNCH bypass chart_state gate│
-└──────────────────────┬──────────────────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────────────────┐
-│  MEMECOIN FILTER  (bot.py)                              │
-│  Strictly memecoins only — operator directive           │
-│  Blocks: stablecoins, L1s, wrapped, DeFi, utility,    │
-│          commodities, RWA, LP/POOL/VAULT/IOU suffixes  │
-│  Allows: anonymous XRPL issuers with large supply      │
-└──────────────────────┬──────────────────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────────────────┐
-│  DISAGREEMENT ENGINE  (disagreement.py)                 │
-│  6 independent veto checks — ANY veto = hard skip      │
-│  1. Rug fingerprint  (issuer wallet age, seq<5=veto)   │
-│  2. Fake burst       (wash detection, <3 wallets=veto) │
-│  3. Liquidity trap   (95%+ LP one wallet=veto)         │
-│  4. Smart money veto (3+ tracked wallets selling=veto) │
-│  5. Hard blacklist   (rug registry, 3+ hard stops)     │
-│  6. Regime veto      (DANGER: need 50+ TS or score≥75) │
-└──────────────────────┬──────────────────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────────────────┐
-│  STRATEGY ENGINE  (classifier.py strategies)            │
-│  Per-type: valid() → confirm() → score()               │
-│  Each strategy has its own thresholds and logic        │
-└──────────────────────┬──────────────────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────────────────┐
-│  EXECUTION CORE  (execution_core.py) — NEW Apr 8       │
-│  Centralized pipeline (GodMode fast-path only):        │
-│    1. Confidence gate  (≥0.44, hard stop)            │
-│    2. Strategy ownership (classifier authorizes)       │
-│    3. Strategy valid()/confirm() checks                │
-│    4. Pre-trade validator (slippage/liquidity/route)  │
-│    5. Position sizer ($5 min, MC-based % of TVL)     │
-│    6. Split execution (40/60 legs, 2s wait)          │
-│  Legacy path → direct execution.buy_token() fallback   │
-└──────────────────────┬──────────────────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────────────────┐
-│  EXECUTE  (execution.py)                               │
-│  AMM via OfferCreate IOC + private CLIO endpoint     │
-│  Split legs: leg1 (40%) then leg2 (60%) after 2s     │
-│  Trustline set → OfferCreate IOC → position recorded  │
-└──────────────────────┬──────────────────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────────────────┐
-│  POSITION MANAGER  (dynamic_tp.py)                      │
-│  Strategy-aware exits — each type has own rules        │
-│                                                         │
-│  BURST:        trail=20% hard=10% stale=1hr           │
-│    TPs: 2x→50% | 3x→30% | 6x→100%                   │
-│  CLOB_LAUNCH:  trail=15% hard=8%  stale=30min         │
-│    TPs: 1.4x→40% | 2x→30% | 3x→100%                 │
-│  PRE_BREAKOUT: trail=25% hard=12% stale=3hr           │
-│    TPs: 1.3x→20% | 2x→20% | 5x→30% | 10x→100%      │
-│  TREND:        trail=18% hard=8%  stale=2hr           │
-│    TPs: 1.2x→20% | 1.5x→20% | 2x→30% | 4x→100%     │
-│  MICRO_SCALP:  trail=8%  hard=6%  stale=45min         │
-│    TPs: 1.1x→60% | 1.2x→100%                         │
-└──────────────────────┬──────────────────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────────────────┐
-│  LEARN LAYER  (shadow_ml.py + learn.py)                 │
-│  Real outcomes fed back per strategy                   │
-│  get_real_strategy_weights() → adjusts sizing over time│
-│  Shadow paper trades 159+ tokens simultaneously        │
-└─────────────────────────────────────────────────────────┘
-```
+### Pre-Move Detector (pre_move_detector.py)
+- Scans AMM TVL $400-$5k window every cycle
+- Injects pre_accumulation entries at 5 XRP
+- Signals: PRE_ACCUMULATION → WHALE_BUILDING → CONFIRMED_MOVE → SCALING
+- TVL doubling (50%+) = whale accumulating
+- State file: state/pre_move_state.json (capped 100 signals / 50 entries)
+
+### Classifier (classifier.py)
+- BURST: burst_count≥8 TS/hr OR velocity>2.5 OR _burst_mode → FAST PATH
+- CLOB_LAUNCH: age<180s + orderbook signal → FAST PATH
+- PRE_BREAKOUT: chart_state=pre_breakout any TVL, or TVL>50k + low velocity
+- TREND: TVL>200k + rising velocity
+- MICRO_SCALP: TVL<2k + velocity>1.5
+
+### Disagreement Engine (disagreement.py)
+6 checks — ANY veto = hard skip:
+1. Rug fingerprint: issuer seq<5 = veto
+2. Fake burst: <3 unique wallets in TrustSets = wash veto
+3. Liquidity trap: 95%+ LP one wallet = drain veto
+4. Smart money veto: 3+ tracked wallets selling = veto
+5. Hard blacklist: rug registry + 3+ hard stops on token = veto
+6. Regime veto: DANGER requires 50+ TS/hr or score≥75
+
+### Memecoin Filter (bot.py)
+Strictly memecoins only. Blocks:
+- Stablecoins / fiat-pegged (USD, USDT, RLUSD, EUR, etc.)
+- Real L1/L2 tokens (ETH, BTC, SOL, AVAX, etc.)
+- XRPL ecosystem utility (EVR, SOLO, CSC, etc.)
+- Wrapped / bridged assets (WXRP, WFLR, etc.)
+- Payment / fintech infrastructure (XRPAYNET, PAYNET, etc.)
+- Substring filter: PAYNET, BRIDGE, PROTOCOL, FINANCE, NETWORK, EXCHANGE, CUSTODY, WALLET
+- Suffix filter: IOU, LP, POOL, VAULT
+
+### Execution (execution.py) — CRITICAL FIX Apr 9
+**IOC dust-minimum pattern:**
+- BUY: taker_pays = "1" (dust) — fills at any available price
+- SELL: taker_pays = "1" drop — fills at any available price
+- NO min_tokens or min_xrp floor — eliminates tecKILLED entirely
+- Post-trade slippage gate: >15% = immediate recovery sell
+
+### Per-Strategy Exits (dynamic_tp.py)
+| Strategy | Trail | Hard | Stale | TP Ladder |
+|----------|-------|------|-------|-----------|
+| burst | 20% | 10% | 1 hr | 2x→50%, 3x→30%, 6x→100% |
+| clob_launch | 15% | 8% | 30 min | 1.4x→40%, 2x→30%, 3x→100% |
+| pre_breakout | 25% | 12% | 3 hr | 1.3x→20%, 2x→20%, 5x→30%, 10x→100% |
+| trend | 18% | 8% | 2 hr | 1.2x→20%, 1.5x→20%, 2x→30%, 4x→100% |
+| micro_scalp | 8% | 6% | 45 min | 1.1x→60%, 1.2x→100% |
+
+### Burst Sizing (sizing.py — slippage-safe)
+- TVL <200 XRP → 7 XRP hard cap
+- TVL 200-500 XRP → 7-15 XRP linear scale
+- TVL ≥500 XRP → full sizing (1.0x flat)
+- Burst multiplier: 8+ TS/hr→+20% | 25+→+35% | 50+→+50%
+
+### TrustSet Watcher
+- MIN_TRUSTSETS_1H=8 | MIN_TRUSTSETS_ABS=15
+- Scans EVERY cycle — catches $400 MC launches
 
 ---
 
-## Files Changed — April 8, 2026
-
-### 1. trustset_watcher.py
-**Change**: Lowered burst thresholds, catches DKLEDGER-type at $400 MC
-
-```python
-MIN_TRUSTSETS_1H  = 8      # was 15 — catches early launches before price moves
-MIN_TRUSTSETS_ABS = 15     # was 25
-MAX_AMM_AGE_H     = 24
-MAX_SEED_XRP      = 1000
-MAX_ENTRY_TVL     = 3000
-MIN_ENTRY_TVL     = 30
-```
-
----
-
-### 2. bot.py — Key Changes
-
-**A) TrustSet scan every cycle (was every 4th)**
-```python
-# ── 0c. TrustSet velocity scan (EVERY cycle) — PHX-type launch detector
-if _cycle_count % 1 == 0:   # was % 4 == 1
-```
-
-**B) BURST + CLOB_LAUNCH fast path (authoritative classifier)**
-```python
-if _gm_type in ("burst", "clob_launch"):
-    candidate["_fast_path"] = True
-    candidate["_burst_mode"] = True
-    total_score = max(total_score, int(_gm_score))
-    logger.info(f"  🚀 FAST-PATH {symbol}: type={_gm_type} → AUTHORITATIVE ENTRY")
-```
-
-**C) Fast path bypasses chart_state gate**
-```python
-if candidate.get("_fast_path"):
-    logger.info(f"✅ {symbol}: chart_state={chart_state} BYPASSED — fast-path strategy")
-    # continue to sizing, don't skip
-```
-
-**D) Disagreement engine wired in**
-```python
-import disagreement as _disagree_mod
-_disagree_result = _disagree_mod.evaluate(
-    candidate=candidate, bot_state=bot_state,
-    regime=regime, score=total_score,
-)
-if _disagree_result["verdict"] == "veto":
-    logger.info(f"🚫 VETO {symbol}: {_disagree_result['reason']}")
-    continue   # hard skip — no overrides
-_adj = _disagree_result.get("confidence_adj", 0)
-if _adj != 0:
-    total_score = max(0, round(total_score + _adj * 10))
-```
-
-**E) ts_burst confidence wired into sizing**
-```python
-_is_ts_burst = bool(candidate.get("signal_type") == "trustset_velocity" or candidate.get("_burst_mode"))
-_ts_burst_count = int(candidate.get("burst_count", 0) or candidate.get("trustsets_1h", 0))
-_ci = {
-    "ts_burst_active":  _is_ts_burst,
-    "ts_burst_count":   _ts_burst_count,
-    "alpha_signal_active": bool(_is_ts_burst),
-    ...
-}
-```
-
-**F) Strategy-aware stale exit**
-```python
-_strat_exits = dynamic_tp_mod._get_strategy_exits(pos)
-_stale_limit = _strat_exits.get("stale_hours", 2.0)
-_held_hours  = (now - pos.get("entry_time", now)) / 3600
-if _held_hours > _stale_limit:
-    exit_check = {"exit": True, "partial": False, "fraction": 1.0,
-                  "reason": f"stale_{strategy}_{_held_hours:.1f}hr"}
-```
-
-**G) Real outcomes fed to Shadow ML**
-```python
-_shadow_ml.record_real_outcome(
-    symbol=symbol,
-    strategy_type=pos.get("_godmode_type", "unknown"),
-    entry_price=pos.get("entry_price", 0),
-    exit_price=current_price,
-    exit_reason=reason,
-)
-```
-
-**H) Hardened memecoin filter**
-```python
-# Stablecoins
-STABLECOIN_SKIP = {
-    "USD","USDC","USDT","RLUSD","XUSD","AUDD","XSGD","XCHF","GYEN",
-    "EUR","EURO","EUROP","GBP","JPY","CNY","AUD","CAD","MXRP",
-    "USDD","FRAX","LUSD","SUSD","TUSD","BUSD","GUSD","HUSD",
-}
-# Non-meme tokens
-NON_MEME_SKIP = {
-    "XDC","ETH","WETH","WBTC","BTC","SOL","AVAX","MATIC","BNB","ADA",
-    "DOT","LINK","UNI","AAVE","CRV","MKR","SNX","COMP","LDO","ATOM",
-    "ALGO","NEAR","FTM","OP","ARB","INJ","SUI","APT","SEI","TIA",
-    "EVR","SOLO","CSC","CORE","LOBSTR","GATEHUB","BITSTAMP","XUMM","XAPP",
-    "WXRP","WXDC","WFLR","WSGB","WXAH",
-    "BLZE","VLX","EXFI","SFLR",
-    "GOLD","SLVR","OIL","SPX","NDX",
-    "RLUSD","TREASU","TBILL",
-}
-NON_MEME_SUFFIXES = ("IOU","LP","POOL","VAULT")
-```
-
----
-
-### 3. classifier.py — BURST thresholds fixed
-
-```python
-# BURST: TrustSet velocity burst OR fast price momentum
-burst_count = token.meta.get("burst_count", 0) or token.meta.get("ts_burst_count", 0)
-if burst_count >= 8:                          # was: velocity>2.5 AND vol>50K
-    return TokenType.BURST
-if token.velocity > 2.5 and token.tvl > 200:
-    return TokenType.BURST
-if token.meta.get("_burst_mode", False):
-    return TokenType.BURST
-
-# PRE_BREAKOUT: widened — any TVL with chart_state confirmed
-if token.meta.get("chart_state") == "pre_breakout" and token.velocity < 1.5:
-    return TokenType.PRE_BREAKOUT
-if token.tvl > 50_000 and token.velocity < 1.2:
-    return TokenType.PRE_BREAKOUT
-```
-
-**Strategy classes** — each has own valid()/confirm()/score():
-- `BurstStrategy`: valid if burst_count≥8, confirm if burst≥5
-- `PreBreakoutStrategy`: valid if TVL>80k OR chart_state=pre_breakout
-- `TrendStrategy`: valid if TVL>250k + velocity>1.4
-- `ClobLaunchStrategy`: valid if age<180s + CLOB/burst signal
-- `MicroScalpStrategy`: valid if TVL<2k + velocity>1.5
-
----
-
-### 4. dynamic_tp.py — Per-strategy exits
-
-```python
-def _get_strategy_exits(position: Dict) -> Dict:
-    strategy = position.get("_godmode_type", "unknown")
-    STRATEGIES = {
-        "burst": {
-            "tps": [(2.0,0.50),(3.0,0.30),(6.0,1.0)],
-            "trail_stop": 0.20, "hard_stop": 0.10, "stale_hours": 1.0,
-        },
-        "clob_launch": {
-            "tps": [(1.4,0.40),(2.0,0.30),(3.0,1.0)],
-            "trail_stop": 0.15, "hard_stop": 0.08, "stale_hours": 0.5,
-        },
-        "pre_breakout": {
-            "tps": [(1.3,0.20),(2.0,0.20),(5.0,0.30),(10.0,1.0)],
-            "trail_stop": 0.25, "hard_stop": 0.12, "stale_hours": 3.0,
-        },
-        "trend": {
-            "tps": [(1.2,0.20),(1.5,0.20),(2.0,0.30),(4.0,1.0)],
-            "trail_stop": 0.18, "hard_stop": 0.08, "stale_hours": 2.0,
-        },
-        "micro_scalp": {
-            "tps": [(1.10,0.60),(1.20,1.0)],
-            "trail_stop": 0.08, "hard_stop": 0.06, "stale_hours": 0.75,
-        },
-    }
-    DEFAULT = {
-        "tps": [(1.20,0.30),(1.50,0.30),(3.00,0.30),(6.00,1.0)],
-        "trail_stop": 0.20, "hard_stop": 0.15, "stale_hours": 2.0,
-    }
-    return STRATEGIES.get(strategy, DEFAULT)
-```
-
-**_tp_flag system** — prevents double-firing same TP level:
-```python
-for i, (tp_mult, sell_frac) in enumerate(tps):
-    flag = f"dynamic_tp_exited_tp{i}"
-    if multiple >= tp_mult and not position.get(flag, False):
-        return {"action":"exit","pct":sell_frac,"reason":f"tp{i+1}","_tp_flag":flag}
-```
-
----
-
-### 5. sizing.py — Slippage-safe burst sizing
-
-```python
-if confidence_inputs.get("ts_burst_active", False):
-    # Burst multiplier by TS count
-    ts_count = int(confidence_inputs.get("ts_burst_count", 0))
-    if ts_count >= 50:   multiplier += 0.50   # PHX-level
-    elif ts_count >= 25: multiplier += 0.35
-    elif ts_count >= 8:  multiplier += 0.20
-
-    # TVL slippage cap
-    if tvl < 200:
-        return 7.0   # hard cap — ghost pool
-    elif tvl < 500:
-        capped = 7.0 + (tvl - 200) / 300 * 8.0   # 7→15 XRP
-        return max(3.0, min(capped, base_xrp * multiplier))
-    else:
-        liquidity_factor = 1.0   # full sizing, pool can absorb
-```
-
----
-
-### 6. shadow_ml.py — Real outcome feedback
-
-```python
-def record_real_outcome(self, symbol, strategy_type, entry_price, exit_price, exit_reason):
-    """Called on every real position close. Feeds actual WR back into strategy weights."""
-    pnl = (exit_price - entry_price) / entry_price
-    self.state["real_outcomes"].append({
-        "symbol": symbol, "strategy_type": strategy_type,
-        "pnl": pnl, "exit_reason": exit_reason,
-        "ts": time.time(), "source": "real"
-    })
-
-def get_real_strategy_weights(self) -> dict:
-    """Win rates from real trades only. Used to adjust sizing over time."""
-    # Returns {"burst": 0.64, "pre_breakout": 0.52, ...}
-    # None if < 5 real trades for that strategy yet
-```
-
----
-
-### 7. disagreement.py — NEW FILE (full source above)
-
-6 independent checks. Any veto = skip. No overrides.
-
----
-
-### 8. execution_core.py — NEW FILE (Apr 8, 2026)
-
-**Purpose:** Centralized trade execution pipeline replacing the inline execution block in `bot.py`.
-
-```
-Pipeline:
-  execute_trade() → pre_trade_validator() → position_sizer() → split_execute()
-```
-
-**Key parameters:**
-```python
-MIN_POSITION_XRP   = 5.0    # absolute floor — no trades below this (was 3.0)
-MIN_CONFIDENCE     = 0.44   # classifier confidence gate — hard stop
-MAX_SLIPPAGE       = 0.15   # 15% — pre-trade slippage cap (was 2.5% post-entry)
-MIN_LIQUIDITY_USD  = 300    # ultra micro-cap guard
-```
-
-**Liquidity engine (`get_safe_entry_size`):**
-```python
-MC < $2k   → 1.5% of TVL  (was hard 7 XRP cap — now scales)
-MC < $10k  → 2.5% of TVL
-MC > $10k  → 3.0% of TVL
-# All floors at MIN_POSITION_XRP = 5.0 XRP
-```
-
-**Pre-trade validator gates (all non-bypassable):**
-```python
-def pre_trade_validator(token):
-    slippage = estimate_slippage(token)   # 80 / liquidity_usd
-    if slippage > 0.15:    return False   # MAX_SLIPPAGE
-    if liquidity < 300:     return False   # MIN_LIQUIDITY_USD
-    if route != "GOOD":     return False
-    return True
-```
-
-**Split execution:**
-```python
-def split_execute(token, size, side="buy"):
-    leg1 = size * 0.40
-    leg2 = size * 0.60
-    tx1 = execute_order(token, leg1)
-    if not tx1["success"]: return tx1
-    time.sleep(2.0)   # stability wait between legs
-    tx2 = execute_order(token, leg2)
-    return {"first": tx1, "second": tx2, "split": True, "size": size}
-```
-
-**Strategy base risk (per-type, used in position_sizer):**
-```python
-_STRATEGY_BASE_RISK = {
-    "burst":        0.20,
-    "clob_launch":  0.20,
-    "pre_breakout": 0.15,
-    "trend":        0.12,
-    "micro_scalp":  0.06,
-    "none":         0.06,
-}
-```
-
-**Integration in bot.py:**
-- GodMode fast-path (BURST, CLOB_LAUNCH) → `execute_trade()` as authoritative entry
-- Legacy score-threshold path → preserved as fallback (single-shot execution)
-- Classifier `classify_and_route()` result provides `strategy` object + `classification` dict
-
-```python
-# bot.py — execution block (approx line 1295)
-if _gm_result.get("action") == "enter" and _gm_result.get("strategy"):
-    _exec_result = execute_trade(
-        token          = {"symbol": symbol, "issuer": issuer, "price": price,
-                         "liquidity_usd": candidate.get("liquidity_usd", 0),
-                         "market_cap": candidate.get("market_cap", 0)},
-        classification = _gm_result.get("classification", {}),
-        strategy       = _gm_result["strategy"],
-        wallet_state   = {"balance": cycle_wallet_xrp, "drawdown": _drawdown_pct},
-        route_quality  = route.get("quality", "GOOD"),
-        side           = "buy",
-    )
-else:
-    # Legacy fallback
-    _exec_result = execution.buy_token(...)
-    _exec_result = {"first": _exec_result, "split": False}
-```
-
-**Commit:** `97342df` — execution_core: centralized trade engine with 5 XRP floor + split entry
-
----
-
-## Execution Core vs Legacy Sizing
-
-| Aspect | Old (sizing.py) | New (execution_core) |
-|--------|----------------|----------------------|
-| Min position | 3.0 XRP | **5.0 XRP** |
-| Micro-cap sizing | 7 XRP hard cap | **1.5% of TVL → floors to $5** |
-| Slippage check | post-entry (2.5% gate) | **pre-entry (15% cap)** |
-| Entry method | single shot | **40/60 split** |
-| Confidence gate | none | **0.44 minimum** |
-| Route quality | partial | **GOOD required** |
-| Strategy ownership | none | **enforced via classifier** |
-
----
-
-## Performance Benchmarks
-
-### Real Data (Old Bot, Apr 6-8)
-| Metric | Value |
-|--------|-------|
-| Trades | 24 closed |
-| Win Rate | 16.7% |
-| PnL | -19.77 XRP |
-| Stale exits | 75% of all trades |
-| Best trade | PHX +4.22 XRP |
-
-### Upgraded Bot Simulation (14-day, 595 tokens, 183 XRP start)
-| Metric | Value |
-|--------|-------|
-| Trades | 9,944 |
-| Win Rate | 61.4% |
-| Profit Factor | 6.82x |
-| Avg Win | +37.78 XRP |
-| Avg Loss | -8.82 XRP |
-| Best token | XMARINES 86% WR, CNS 95% WR |
-| Burst 50+ TS/hr | 72% WR |
-| Burst 8-25 TS/hr | 60% WR (DKLEDGER-type) |
-| Sweet spot TVL | 500-2k XRP (62% WR, avg +33.81) |
-
----
-
-## Scaling Warning
-
-At current 160 XRP balance, dynamic sizing is safe. As balance grows:
-- At 500 XRP: 20% position = 100 XRP → still within pool absorption limits
-- At 1,000 XRP: revisit MAX_POSITION_XRP ceiling (currently 100 XRP)
-- At 2,000+ XRP: needs tiered sizing by pool depth, not just % of balance
+## Backtest Results
+- Sim 14-day (595 tokens): 9,944 trades | WR=61.4% | profit factor=6.82x
+- Best TVL band: micro 500-2k XRP (62% WR, avg +33.81 XRP)
+- Burst 50+ TS/hr: 72% WR | 25-50: 64% | 8-25 (DKLEDGER-type): 60%
 
 ---
 
@@ -526,18 +113,47 @@ At current 160 XRP balance, dynamic sizing is safe. As balance grows:
 ```
 Bot wallet:         rKQACag8Td9TrMxBwYJPGRMDV8cxGfKsmF
 Bot path:           /home/agent/workspace/trading-bot-v2/bot.py
-Execution core:     /home/agent/workspace/trading-bot-v2/execution_core.py
 Cycle:              1 second
-Max positions:      10
-Min position:       5.0 XRP (execution_core MIN_POSITION_XRP)
-Min liquidity:      $300 USD (execution_core MIN_LIQUIDITY_USD)
-Max slippage:       15% (pre-trade gate)
-Confidence gate:    0.44 minimum
-Entry method:       40/60 split (2s stability wait between legs)
+Max positions:      UNLIMITED (removed Apr 8 — full release mode)
+Min position:       5.0 XRP
+Buy method:         IOC OfferCreate, dust min (taker_pays="1")
+Sell method:        IOC OfferCreate, dust min (taker_pays="1" drop)
+Post-trade slippage gate: 15% (immediate recovery sell if exceeded)
 Dashboard:          https://dktrenchbot.pages.dev
+GitHub:             https://github.com/domx1816-dev/dktrenchbot-v2
 ```
 
 ---
 
-*Master Build — DKTrenchBot v2 — April 8, 2026*
-*Built by DKTrenchBot (XRPLClaw.com) with operator*
+## Security
+- ALL Telegram code purged Apr 8 — hot wallet air-gapped from external comms
+- SetRegularKey: bot wallet rKQACag8... controlled by main wallet
+- No external key management — keys generated and stored locally only
+
+---
+
+## Scaling Notes
+- At 500 XRP: revisit position sizing floors
+- At 1,000+ XRP: revisit MAX_POSITION_XRP ceiling
+- At 2,000+ XRP: needs tiered sizing by pool depth
+
+---
+
+## Change Log Summary
+| Date | Change |
+|------|--------|
+| Apr 9, 2026 | **CRITICAL:** tecKILLED fix — IOC dust minimum pattern |
+| Apr 9, 2026 | Meme filter: block XRPayNet + utility/payment keywords |
+| Apr 9, 2026 | Slippage gate: 2.5% → 15% (post-trade, not pre-trade) |
+| Apr 8, 2026 | MAX_POSITIONS removed — full release mode |
+| Apr 8, 2026 | Telegram code purged — air-gap security |
+| Apr 8, 2026 | Pre-move detector added ($400-$5k TVL window) |
+| Apr 7, 2026 | Dynamic TP ladders per strategy |
+| Apr 7, 2026 | Burst sizing with slippage-safe TVL caps |
+| Apr 6, 2026 | Disagreement engine (6-check veto) |
+| Apr 5, 2026 | Execution hardener, orphan tracking |
+| Apr 4, 2026 | v2 initial build |
+
+---
+
+*DKTrenchBot v2 — Built on XRPLClaw.com*
