@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>DKTrenchBot v2 — Dashboard</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -180,8 +181,10 @@
   <div class="last-updated" id="last-updated"></div>
 
   <script>
-    // API base URL
-    const API_BASE = 'https://atmospheric-acoustic-advocate-respect.trycloudflare.com';
+    // API base URL — change this to your deployed endpoint
+    const API_BASE = window.location.hostname === 'localhost' 
+      ? 'http://localhost:5001/api'
+      : '/api'; // When deployed behind Cloudflare Pages proxy
 
     async function fetchJSON(endpoint) {
       try {

@@ -28,9 +28,10 @@ ALERT_LOG_FILE = os.path.join(STATE_DIR, "safety_alerts.json")
 
 # Drawdown thresholds
 MIN_BALANCE_XRP = 10.0       # emergency stop if balance falls below this
-CONSEC_LOSS_PAUSE = 3        # pause after N consecutive losses all > this XRP
-CONSEC_LOSS_THRESHOLD = 5.0  # each loss must exceed this XRP to count
-SINGLE_LOSS_PAUSE = 10.0     # pause + alert if single loss exceeds this XRP
+CONSEC_LOSS_PAUSE = 5        # pause after N consecutive losses all > this XRP (raised from 3)
+CONSEC_LOSS_THRESHOLD = 8.0  # each loss must exceed this XRP to count (raised from 5.0)
+SINGLE_LOSS_PAUSE = 15.0     # pause + alert if single loss exceeds this XRP (raised from 10.0)
+MAX_PAUSE_DURATION_HOURS = 2  # auto-resume after N hours to avoid missing plays
 
 
 def _write_file(path: str, content: str) -> None:
@@ -88,12 +89,12 @@ class SafetyController:
         _log_alert("PAUSED", reason)
         print(f"⏸️  Bot PAUSED: {reason}")
 
-    def resume(self) -> None:
+    def resume(self, reason: str = "manual resume") -> None:
         """Remove PAUSED file."""
         if os.path.exists(PAUSE_FILE):
             os.remove(PAUSE_FILE)
-            _log_alert("RESUMED", "manual resume")
-            print("▶️  Bot RESUMED — new entries re-enabled")
+            _log_alert("RESUMED", reason)
+            print(f"▶️  Bot RESUMED ({reason}) — new entries re-enabled")
         else:
             print("ℹ️  Bot was not paused")
 
@@ -169,7 +170,7 @@ class SafetyController:
         Called at the top of every run_cycle().
         Returns: 'ok', 'paused', 'stopped'
 
-        Also auto-checks drawdown conditions.
+        Also auto-checks drawdown conditions and auto-resumes after timeout.
         """
         # Run drawdown checks first (may activate pause/stop)
         self.check_drawdown_kill(bot_state)
@@ -177,8 +178,24 @@ class SafetyController:
         if self.is_emergency_stopped():
             return "stopped"
         if self.is_paused():
+            # Auto-resume check: if paused too long, resume automatically
+            if self._should_auto_resume():
+                self.resume(reason="auto_resume_timeout")
+                return "ok"
             return "paused"
         return "ok"
+
+    def _should_auto_resume(self) -> bool:
+        """Check if pause has exceeded MAX_PAUSE_DURATION_HOURS."""
+        if not os.path.exists(PAUSE_FILE):
+            return False
+        try:
+            data = json.loads(open(PAUSE_FILE).read())
+            pause_ts = float(data.get("ts", 0))
+            elapsed_hours = (time.time() - pause_ts) / 3600
+            return elapsed_hours >= MAX_PAUSE_DURATION_HOURS
+        except Exception:
+            return False
 
     def get_status(self) -> Dict:
         """Return current status dict."""

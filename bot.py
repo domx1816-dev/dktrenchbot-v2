@@ -116,12 +116,12 @@ import wallet_hygiene
 import improve as improve_mod
 import report as report_mod
 import sniper as sniper_mod
-import brain
+# import brain  # DISABLED — no trained ML model yet (need 50+ trades first)
 
 # ── New Modules (Audit Improvements) ───────────────────────────────────────────
 import new_wallet_discovery as wallet_discovery_mod
-import wallet_cluster as cluster_mod
-import alpha_recycler as recycler_mod
+# import wallet_cluster as cluster_mod  # DISABLED — removed, WebSocket failing constantly
+# import alpha_recycler as recycler_mod  # DISABLED — depends on smart_money tracked wallets
 import dynamic_tp as dynamic_tp_mod
 import classifier as classifier_mod
 
@@ -136,6 +136,9 @@ try:
 except Exception as _shadow_ml_err:
     _SHADOW_ML_AVAILABLE = False
     logger.debug(f"[shadow_ml] import failed (non-fatal): {_shadow_ml_err}")
+
+# DISABLED — improve_loop removed for optimization
+_IMPROVE_LOOP_AVAILABLE = False
 
 # ── Improvement Loop ──────────────────────────────────────────────────────────
 try:
@@ -359,7 +362,7 @@ def run_cycle(bot_state: Dict) -> Dict:
     # ── 0d. Alpha Recycler scan (every 5th cycle ~5min) — Audit #3 ────────────
     if _cycle_count % 5 == 3:
         try:
-            recycle_signals = recycler_mod.scan_alpha_recycling(bot_state)
+            # recycle_signals = recycler_mod.scan_alpha_recycling  # DISABLED(bot_state)
             for sig in recycle_signals:
                 logger.info(
                     f"🔁 ALPHA RECYCLE: {sig['wallet'][:10]}... sold "
@@ -417,7 +420,7 @@ def run_cycle(bot_state: Dict) -> Dict:
                     _price = _c.get("price", 0)
                     if _sym and _price > 0:
                         _market_data[_sym] = {"price": _price}
-                _entered = _shadow_ml.run_cycle(candidates, _market_data)
+                _entered = # _shadow_ml.run_cycle  # DISABLED(candidates, _market_data)
                 logger.info(f"👻 Shadow ML: evaluated {len(candidates)}, entered {_entered}")
             except Exception as _sle:
                 logger.exception(f"[shadow_ml] cycle error: {_sle}")
@@ -1323,7 +1326,7 @@ def run_cycle(bot_state: Dict) -> Dict:
                         _is_ts_burst = bool(candidate.get("signal_type") == "trustset_velocity" or candidate.get("_burst_mode"))
                         _ts_burst_count = int(candidate.get("burst_count", 0) or candidate.get("trustsets_1h", 0))
                         _ci = {
-                            "wallet_cluster_active": bool(cluster_mod.get_cluster_signal(key) if hasattr(cluster_mod, "get_cluster_signal") else False),
+                            "wallet_cluster_active": bool(None  # cluster DISABLED(key) if hasattr(cluster_mod, "get_cluster_signal") else False),
                             "alpha_signal_active": bool(_is_ts_burst),
                             "ts_burst_active": _is_ts_burst,           # explosive early launch signal
                             "ts_burst_count": _ts_burst_count,         # TrustSets/hr — scales position
@@ -2218,7 +2221,7 @@ def startup(bot_state: Dict) -> Dict:
             except Exception as _cbe:
                 logger.debug(f"Cluster alert callback error: {_cbe}")
 
-        cluster_mod.start_cluster_monitor(bot_state=bot_state, on_alert=_on_cluster_alert)
+        # cluster_mod.start_cluster_monitor  # DISABLED(bot_state=bot_state, on_alert=_on_cluster_alert)
         logger.info("📡 Wallet cluster monitor started — watching for coordinated entries")
     except Exception as e:
         logger.warning(f"Cluster monitor startup error (non-fatal): {e}")
