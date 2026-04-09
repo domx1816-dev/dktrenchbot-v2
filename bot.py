@@ -1086,35 +1086,35 @@ def run_cycle(bot_state: Dict) -> Dict:
                 # Any token with TVL < 400 XRP has essentially $0 market cap —
                 # no liquidity, no real price discovery. Hard skip.
                 _entry_tvl = candidate.get("tvl_xrp", tvl)
-                if _entry_tvl < 400:
-                    logger.info(f"SKIP {symbol}: TVL={_entry_tvl:.0f} XRP < 400 XRP floor ($0 MC zone) — not our tier")
+                if _entry_tvl < 100:
+                    logger.info(f"SKIP {symbol}: TVL={_entry_tvl:.0f} XRP < 100 XRP (~$200 MC) — true dust, not our tier")
                     continue
 
                 # ── TVL TIER GATE — ghost/micro/small with score band 42-52 ──
-                # Operator directive (Apr 9): only trade these three tiers:
-                #   ghost  (<500 XRP TVL)       — allowed only with strong burst signal
-                #   micro  (500–2000 XRP TVL)   — core sweet spot
-                #   small  (2000–10000 XRP TVL) — secondary sweet spot
+                # Operator sweet spot: $400–$2,000 MC. At ~$2/XRP, AMM holds ~50% MC in XRP:
+                #   ghost  (<200 XRP TVL)        ~<$400 MC  — burst/realtime signal only
+                #   micro  (200–500 XRP TVL)     ~$400–$1K MC  — CORE sweet spot
+                #   small  (500–2,500 XRP TVL)   ~$1K–$5K MC   — secondary sweet spot
+                # Hard ceiling: >2,500 XRP TVL (~$5K MC) = stale/discovered zone — hard skip.
                 # Score band: 42–52. Pre-breakout chart_state requires score ≥ 45.
-                # Tokens with TVL > 10K XRP are stale/discovered — hard skip.
                 _tier_tvl = _entry_tvl
-                if _tier_tvl > 10_000:
-                    logger.info(f"SKIP {symbol}: TVL={_tier_tvl:.0f} XRP > 10K — outside target tiers (ghost/micro/small)")
+                if _tier_tvl > 2_500:
+                    logger.info(f"SKIP {symbol}: TVL={_tier_tvl:.0f} XRP (~${_tier_tvl*2:.0f} MC) > sweet spot ceiling — stale/discovered")
                     continue
 
                 # Classify tier
-                if _tier_tvl < 500:
+                if _tier_tvl < 200:
                     _tvl_tier = "ghost"
-                    # Ghost tier: only trade on strong burst signal (≥10 TS/5min or realtime)
+                    # Ghost (<$400 MC): only enter on strong burst/realtime — too early for scan
                     _is_ghost_burst = (candidate.get("_burst_mode") or candidate.get("_clob_launch")
                                        or candidate.get("signal_type") == "trustset_velocity")
                     if not _is_ghost_burst:
-                        logger.info(f"SKIP {symbol}: ghost tier TVL={_tier_tvl:.0f} XRP — needs burst/realtime signal, not in scan")
+                        logger.info(f"SKIP {symbol}: ghost tier TVL={_tier_tvl:.0f} XRP (~${_tier_tvl*2:.0f} MC) — needs burst/realtime")
                         continue
-                elif _tier_tvl <= 2_000:
-                    _tvl_tier = "micro"
+                elif _tier_tvl <= 500:
+                    _tvl_tier = "micro"   # $400–$1K MC — core sweet spot
                 else:
-                    _tvl_tier = "small"
+                    _tvl_tier = "small"   # $1K–$5K MC — secondary sweet spot
 
                 candidate["_tvl_tier"] = _tvl_tier
                 logger.debug(f"  [tier] {symbol}: {_tvl_tier} TVL={_tier_tvl:.0f} XRP")

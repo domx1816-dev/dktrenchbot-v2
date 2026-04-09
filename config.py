@@ -44,7 +44,7 @@ MAX_POSITIONS = 999  # no limit - master build in full release mode
 # ── TVL Thresholds ─────────────────────────────────────────────────────────────
 # DATA: Winners cluster in micro TVL (under 3K XRP). Established pools (5K-20K)
 # score high but produce 0% WR. Flip the model.
-MIN_TVL_XRP        = 400    # operator directive: $400+ MC floor — kills $0 MC ghost launches
+MIN_TVL_XRP        = 100    # ~$200 MC floor at $2/XRP — catches full $400-$2K MC sweet spot. Kills true $0 MC dust.
 TVL_MICRO_CAP_XRP  = 5000   # under 5K XRP TVL = micro sizing (was 2K, too tight)
 MIN_TVL_DROP_EXIT  = 0.40   # exit if TVL drops >40% in one cycle (pool draining)
 

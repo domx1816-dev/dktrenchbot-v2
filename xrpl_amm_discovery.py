@@ -30,7 +30,7 @@ CLIO_URL = "https://rpc.xrplclaw.com"
 
 # Discovery settings
 TARGET_TOKENS     = 350   # target pool size
-MIN_TVL_XRP       = 400   # operator sweet spot floor — ghost/micro/small tiers only
+MIN_TVL_XRP       = 100   # ~$200 MC at $2/XRP — catches full $400-$2K MC sweet spot
 STALE_REMOVE_HRS  = 48    # remove tokens with no AMM after 48h
 
 # Stablecoin/fiat issuers and symbols to exclude
