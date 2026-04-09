@@ -167,3 +167,13 @@ MAX_POSITION_XRP = 15.0  # Hard ceiling per trade — reduced from 40 to protect
 # ── ML Pipeline ───────────────────────────────────────────────────────────────
 ML_ENABLED = True  # Enable ML feature logging and (when ready) predictions
 
+
+# ── Strategy Allowlist (operator directive Apr 9 2026) ────────────────────────
+# 14-day backtest on current 682-token universe:
+#   burst:        67% WR | +1200 XRP | avg_win +5.3  ✅
+#   pre_breakout: 36% WR | +1463 XRP | avg_win +13.1 ✅
+#   micro_scalp:  71% WR |  +158 XRP                 ✅ keep
+#   clob_launch:  36% WR |   +71 XRP  → reclassify as burst if burst-backed
+#   trend:        18% WR |   -0.9 XRP ❌ BLOCKED (TVL > 200K = outside MC sweet spot)
+BLOCKED_STRATEGIES = {"trend"}       # hard block
+PREFERRED_STRATEGIES = {"burst", "pre_breakout"}  # primary signal sources

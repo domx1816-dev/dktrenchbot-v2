@@ -952,6 +952,33 @@ def run_cycle(bot_state: Dict) -> Dict:
                 except Exception as _gme:
                     logger.debug(f"GodMode classifier error {symbol}: {_gme}")
 
+                # ── STRATEGY ALLOWLIST — operator directive Apr 9 ────────────
+                # BACKTEST RESULTS (current token universe, 14d sim):
+                #   burst       : 67% WR | +1200 XRP | avg_win +5.3 XRP  ✅ AUTHORIZED
+                #   pre_breakout: 36% WR | +1463 XRP | avg_win +13.1 XRP ✅ AUTHORIZED
+                #   micro_scalp : 71% WR |  +158 XRP  — small contrib, keep
+                #   clob_launch : 36% WR |   +71 XRP  — reclassify as burst if burst-backed
+                #   trend       : 18% WR |   -0.9 XRP ❌ BLOCKED — outside our MC zone
+                #
+                # Rule: BLOCK trend (TVL > 200K = way outside our $400-$5K MC sweet spot).
+                # clob_launch → reclassify as burst if TS burst signal present.
+                # micro_scalp → keep (71% WR in backtest, same TVL tier as our sweet spot).
+                _classified_type = candidate.get("_godmode_type", "")
+                _chart_pb = candidate.get("chart_state", "") == "pre_breakout"
+                _is_burst_flag = bool(candidate.get("_burst_mode") or candidate.get("_clob_launch"))
+
+                if _classified_type == "trend":
+                    logger.info(f"SKIP {symbol}: strategy=trend — TVL > 200K outside sweet spot (18% WR, -0.9 XRP PnL)")
+                    continue
+                elif _classified_type == "clob_launch":
+                    if _is_burst_flag:
+                        candidate["_godmode_type"] = "burst"
+                        logger.info(f"  ↪️  {symbol}: clob_launch → burst (TS burst signal confirmed)")
+                    # else: let it through as clob_launch — scores gate will handle it
+                elif not _classified_type and not _chart_pb and not _is_burst_flag:
+                    logger.debug(f"SKIP {symbol}: no strategy signal (type=none, chart={candidate.get('chart_state','?')})")
+                    continue
+
                 # ── Disagreement Engine — second opinion before entry ─────────
                 # Runs 6 independent checks. Any veto kills the trade.
                 # Warns reduce confidence score. Passes add to it.
