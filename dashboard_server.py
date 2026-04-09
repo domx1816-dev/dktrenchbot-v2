@@ -10,6 +10,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 import threading
 import time
+import json
+import os
 from datetime import datetime
 
 app = FastAPI(title="DKTrenchBot Dashboard API")
@@ -291,3 +293,126 @@ def get_ml_status():
         "trades_needed": trades_needed,
         "features_logged": features_logged,
     }
+
+
+# ── Compatibility endpoints for external dashboard ─────────────────────────
+
+@app.get("/api/status")
+def api_status():
+    """Bot health + basic stats (compatible with external dashboard)."""
+    import os, subprocess
+    state_file = os.path.join(os.path.dirname(__file__), "state", "state.json")
+    regime_file = os.path.join(os.path.dirname(__file__), "state", "regime.json")
+    
+    perf = STATE.copy()
+    win_rate = perf["wins"] / max(perf["trades"], 1)
+    
+    # Check if bot is running
+    try:
+        result = subprocess.run(
+            ["pgrep", "-f", "python3 bot.py"],
+            capture_output=True, text=True, timeout=5
+        )
+        is_running = bool(result.stdout.strip())
+    except Exception:
+        is_running = False
+    
+    regime = "unknown"
+    if os.path.exists(regime_file):
+        try:
+            with open(regime_file) as f:
+                regime = json.load(f).get("regime", "unknown")
+        except Exception:
+            pass
+    
+    paused = os.path.exists(os.path.join(os.path.dirname(__file__), "state", "PAUSED"))
+    stopped = os.path.exists(os.path.join(os.path.dirname(__file__), "state", "EMERGENCY_STOP"))
+    
+    return {
+        "online": is_running,
+        "last_updated": time.time(),
+        "xrp_balance": perf["balance"],
+        "performance": {
+            "win_rate": win_rate,
+            "total_pnl_xrp": perf["pnl"],
+            "total_trades": perf["trades"],
+            "consecutive_losses": 0,  # Would need to pull from state.json
+            "open_positions": len(perf["positions"]),
+        },
+        "regime": regime,
+        "is_paused": paused,
+        "is_stopped": stopped,
+    }
+
+
+@app.get("/api/trades")
+def api_trades():
+    """Last 20 trades."""
+    import os
+    exec_log_file = os.path.join(os.path.dirname(__file__), "state", "execution_log.json")
+    try:
+        with open(exec_log_file) as f:
+            exec_log = json.load(f)
+        trade_list = exec_log.get("trades", [])
+        recent = trade_list[-20:] if isinstance(trade_list, list) else []
+        return {"trades": recent}
+    except Exception:
+        return {"trades": []}
+
+
+@app.get("/api/candidates")
+def api_candidates():
+    """Top scan candidates."""
+    import os
+    scan_file = os.path.join(os.path.dirname(__file__), "state", "scan_results.json")
+    try:
+        with open(scan_file) as f:
+            scan = json.load(f)
+        return {
+            "fresh_momentum": scan.get("fresh_momentum", [])[:10],
+            "sustained_momentum": scan.get("sustained_momentum", [])[:10],
+            "late_extension": scan.get("late_extension", [])[:5],
+            "scan_time": scan.get("scan_time", 0),
+        }
+    except Exception:
+        return {"fresh_momentum": [], "sustained_momentum": [], "late_extension": []}
+
+
+@app.get("/api/safety")
+def api_safety():
+    """Safety controller status."""
+    import os
+    state_dir = os.path.join(os.path.dirname(__file__), "state")
+    paused = os.path.exists(os.path.join(state_dir, "PAUSED"))
+    stopped = os.path.exists(os.path.join(state_dir, "EMERGENCY_STOP"))
+    
+    pause_reason = ""
+    if paused:
+        try:
+            with open(os.path.join(state_dir, "PAUSED")) as f:
+                pause_reason = json.load(f).get("reason", "unknown")
+        except Exception:
+            pass
+    
+    return {
+        "is_paused": paused,
+        "is_stopped": stopped,
+        "pause_reason": pause_reason,
+    }
+
+
+@app.get("/api/realtime")
+def api_realtime():
+    """Recent realtime signals."""
+    import os
+    log_file = os.path.join(os.path.dirname(__file__), "state", "bot_stdout.log")
+    signals = []
+    try:
+        with open(log_file) as f:
+            lines = f.readlines()[-50:]
+        for line in lines:
+            if "BURST" in line or "BUY CLUSTER" in line or "REALTIME" in line:
+                signals.append(line.strip())
+    except Exception:
+        pass
+    return {"signals": signals[-20:]}
