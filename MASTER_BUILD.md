@@ -1,11 +1,12 @@
 # DKTrenchBot v2 — Master Build
 
-**Last Updated:** April 9, 2026 — 19:34 UTC  
+**Last Updated:** April 9, 2026 — 21:27 UTC  
 **Status:** LIVE  
 **Wallet:** rKQACag8Td9TrMxBwYJPGRMDV8cxGfKsmF  
-**Balance:** ~199.66 XRP  
+**Balance:** ~142 XRP  
 **Dashboard:** https://mom-viii-sunshine-requiring.trycloudflare.com  
-**GitHub:** https://github.com/domx1816-dev/dktrenchbot-v2 (commit ba5e5bf)
+**GitHub:** https://github.com/domx1816-dev/dktrenchbot-v2 (commit 0d3a593)  
+**Latest Changes:** Score threshold fix (45→42), agentic readiness, ML pipeline, module optimization
 
 ---
 
@@ -336,3 +337,96 @@ get_amm_tvl('XYZ', 'r4hV1A2vEPvVV8uy6HusdXdxeV8Eb2fYxz')
 - AMM account architecture (issuer-as-AMM vs separate account)
 - **Strategy tracking:** Every position must record what triggered it for post-trade analysis
 - **State consistency:** Reconcile is critical for catching drift between on-chain reality and local state
+
+---
+
+## Final Configuration — April 9, 2026 (21:27 UTC)
+
+### Score Thresholds (Fixed to Match Backtest v2)
+```python
+SCORE_TRADEABLE    = 42    # 42+ → normal entry (backtest 42-44 band: 60% WR)
+SCORE_ELITE        = 50    # 50+ → elite sizing
+PRE_BREAKOUT_GATE  = 42    # pre_breakout requires ≥42 (was incorrectly 45)
+```
+
+**Why this matters:** The 42-44 score band had the **highest win rate (60%)** in backtest. Previous config (≥45) was blocking these best-quality entries.
+
+### TVL Tiers
+```python
+MIN_TVL_XRP        = 100   # Floor — catches $400+ MC tokens
+TVL_MICRO_CAP_XRP  = 5000  # Micro sizing under 5K XRP TVL
+TVL_SCALP_MAX      = 1000  # Quick scalp under 1K XRP
+TVL_HOLD_MIN       = 1000  # Hold mode 1K-10K XRP
+TVL_HOLD_MAX       = 10000 # Skip or micro above 10K XRP
+```
+
+### Strategy Config
+```python
+BLOCKED_STRATEGIES     = {"trend"}          # 14% WR in backtest — blocked
+PREFERRED_STRATEGIES   = {"burst", "pre_breakout"}  # Primary signals
+PREFERRED_CHART_STATES = {"pre_breakout"}   # Only state with runners
+```
+
+### Exit Configuration (Per-Strategy)
+| Strategy | TP Ladder | Trail | Hard Stop | Stale |
+|----------|-----------|-------|-----------|-------|
+| burst | 2x→50%, 3x→30%, 6x→100% | 20% | 10% | 1hr |
+| pre_breakout | 1.3x→20%, 2x→20%, 5x→30%, 10x→100% | 25% | 12% | 3hr |
+| micro_scalp | 2.5x→50%, 4.0x→100% | 20% | 8% | 1hr |
+| clob_launch | 1.4x→40%, 2x→30%, 3x→100% | 15% | 8% | 0.5hr |
+
+### Sizing
+```python
+BASE_PCT_ELITE  = 0.08   # 8% for score ≥65
+BASE_PCT_NORMAL = 0.05   # 5% for score ≥50
+BASE_PCT_SMALL  = 0.03   # 3% for score ≥40 (includes 42-44 band)
+XRP_PER_TRADE_BASE = 8.0 # Normal entry size
+```
+
+### Safety Controller
+```python
+CONSEC_LOSS_PAUSE     = 5     # Pause after 5 consecutive losses
+CONSEC_LOSS_THRESHOLD = 8.0   # Each loss must exceed 8 XRP
+SINGLE_LOSS_PAUSE     = 15.0  # Pause on single 15+ XRP loss
+MAX_PAUSE_DURATION_HOURS = 2  # Auto-resume after 2 hours
+```
+
+### TrustSet Watcher
+```python
+MIN_TRUSTSETS_1H  = 8   # Min TrustSets/hour to flag burst
+MIN_TRUSTSETS_ABS = 15  # Min total TrustSets on token
+```
+
+### Module Inventory
+**Active (27 modules):**
+bot.py, scanner.py, classifier.py, scoring.py, execution.py, execution_core.py, dynamic_tp.py, dynamic_exit.py, sizing.py, safety.py, config.py, state.py, disagreement.py, pre_move_detector.py, regime.py, trustset_watcher.py, realtime_sniper.py, sniper.py, clob_tracker.py, xrpl_amm_discovery.py, new_wallet_discovery.py, wallet_intelligence.py, route_engine.py, reconcile.py, wallet_hygiene.py, report.py, ml_trainer.py
+
+**Disabled (removed/commented):**
+wallet_cluster.py, alpha_recycler.py, brain.py, shadow_ml.py, improve_loop.py, discovery.py, amm_launch_watcher.py, new_amm_watcher.py, dashboard_api.py, DKTrenchBot_v2_ALLINONE.py, DKTrenchBot_v2_MASTER_CONDENSED.py, backtest_master_build.py, backtest_masterpiece.py, backtest_sim.py, backtest_upgraded.py
+
+### Agentic Readiness
+- `llms.txt` — Agent discovery file
+- `SKILL.md` — Operational guide for other agents
+- `/api/ecosystem` — Machine-readable project map
+- Dashboard API endpoints: /api/status, /api/trades, /api/candidates, /api/safety, /api/realtime, /api/ecosystem, /health
+
+### ML Pipeline
+- Auto-trains on 50+ completed trades
+- Predicts win probability before entry
+- Filters trades below 55% confidence threshold
+- Model saved to state/ml_model.json
+
+### Backtest Alignment
+This build matches the **Master Build v2 14-day backtest** configuration:
+- **1,008 trades** simulated
+- **46.9% win rate**
+- **+2,848 XRP net P&L**
+- **5.30x profit factor**
+- **+1,446% return**
+
+Key alignment fixes applied:
+1. SCORE_TRADEABLE: 45 → 42 (captures 60% WR band)
+2. Pre-breakout gate: 45 → 42 (aligns with best-performing score range)
+3. AMM discovery: 4-method fallback chain (catches all memecoins)
+4. Concentration check: 30% → 70% (XRPL meme supply control pattern)
+5. Module cleanup: Removed 15 dead files (~38K lines)
