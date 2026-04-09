@@ -371,3 +371,57 @@ BACKWARD COMPATIBILITY:
   - All other modules importing execution_core are unaffected
 
 CONFIG.PY unchanged — no config changes needed.
+
+─────────────────────────────────────────────
+CRITICAL STRATEGY FIX — Apr 9 2026 02:43 UTC
+Commits: 9a4fde6, 687edb1, 8373f95, 0c38498
+─────────────────────────────────────────────
+
+ROOT CAUSE IDENTIFIED:
+  81% of -22 XRP losses came from stale exits
+  14x stale exits at avg -1.29 XRP each = -18.09 XRP
+  Winners averaged +34.7% — strategy WAS sound, exits were broken
+
+BUG FIXES:
+  - bot.py: NameError 'token' undefined in HOLD mode candidate loop
+    Fixed: token.get("issuer"...) → issuer (already in scope)
+  - bot.py: traceback.format_exc() UnboundLocalError
+    Fixed: replaced with logger.exception()
+  - brain.update_execution_stats renamed from private _update_execution_stats
+
+STRATEGY CHANGES (config.py):
+  - STALE_EXIT_HOURS: 0.97hr → 3.0hr  (tokens need time to develop)
+  - MAX_HOLD_HOURS: 4hr → 12hr         (PHX-type runners need room)
+  - HARD_STOP_EARLY_PCT: 10% → 15%    (was triggering on normal noise)
+  - TRAIL_STOP_PCT: 20% → 25%          (micro-caps swing 20% normally)
+  - MAX_POSITION_XRP: 40 → 15 XRP     (protect capital per trade)
+
+POSITION SIZING (sizing.py):
+  - BASE_PCT_ELITE: 20% → 8% of wallet (was 40 XRP on 200 XRP = too heavy)
+  - BASE_PCT_NORMAL: 12% → 5%
+  - BASE_PCT_SMALL: 6% → 3%
+  - MAX_POSITION_XRP: 100 → 15 XRP hard cap
+
+DYNAMIC EXIT (dynamic_exit.py):
+  - Deep bleed threshold: -1 XRP → -3 XRP (before cutting early)
+  - Stale exits now only fire at pnl < -2% (not pnl < +2%)
+  - Strong winners (3+ XRP) held to MAX_HOLD_HOURS (12hr)
+  - Positive (0.5+ XRP) breathes to 10hr
+
+NEW MODULE: execution_hardener.py
+  - 3-attempt retry with exponential backoff (0.6s base)
+  - Fail-fast on tecINSUF_FUND, tecPATH_DRY, tecNO_AUTH, etc.
+  - Ghost fill detection (buy succeeds, 0 tokens received)
+  - Orphan tracking, state save hooks, success/failure callbacks
+  - safe_buy() / safe_sell() public API — ready to wire into bot.py
+
+REGIME: Still disabled (REGIME_ENABLED = False) — always neutral
+
+BOT STATUS AT TIME OF FIX:
+  - Balance: 199.66 XRP
+  - Previous session: 28 trades, 17.9% WR, -22.28 XRP (pre-fix)
+  - Fix applied and bot restarted: PID 7113
+
+GITHUB:
+  - All commits pushed to master branch
+  - Release to be updated
