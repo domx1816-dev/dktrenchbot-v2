@@ -58,20 +58,21 @@ def _log(msg: str):
 
 
 def _rpc(method: str, params: dict) -> Optional[dict]:
-    for attempt in range(3):
+    for attempt in range(5):  # Increased from 3 to 5 attempts
         try:
             r = requests.post(
                 CLIO_URL,
                 json={"method": method, "params": [params]},
-                timeout=12,
+                timeout=15,  # Increased timeout
             )
             result = r.json().get("result", {})
-            if isinstance(result, dict) and result.get("error") == "slowDown":
-                time.sleep(1.5 * (attempt + 1))
+            # Retry on slowDown or notReady (RPC overloaded)
+            if isinstance(result, dict) and result.get("error") in ("slowDown", "notReady"):
+                time.sleep(2 ** attempt)  # Exponential backoff: 1s, 2s, 4s, 8s, 16s
                 continue
             return result
         except Exception:
-            time.sleep(0.5)
+            time.sleep(0.5 * (attempt + 1))
     return None
 
 

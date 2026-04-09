@@ -54,18 +54,18 @@ _price_history: Dict[str, List] = {}
 
 
 def _rpc(method: str, params: dict) -> Optional[dict]:
-    for attempt in range(3):
+    for attempt in range(5):  # Increased from 3 to 5 attempts
         try:
             resp = requests.post(CLIO_URL, json={"method": method, "params": [params]}, timeout=15)
             data = resp.json()
             result = data.get("result")
-            # Retry on slowDown
-            if isinstance(result, dict) and result.get("error") == "slowDown":
-                time.sleep(1.0 * (attempt + 1))
+            # Retry on slowDown or notReady (RPC overloaded)
+            if isinstance(result, dict) and result.get("error") in ("slowDown", "notReady"):
+                time.sleep(2 ** attempt)  # Exponential backoff: 1s, 2s, 4s, 8s, 16s
                 continue
             return result
         except Exception:
-            time.sleep(0.5)
+            time.sleep(0.5 * (attempt + 1))
     return None
 
 

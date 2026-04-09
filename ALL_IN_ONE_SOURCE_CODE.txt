@@ -1,28 +1,29 @@
 ================================================================================
-DKTrenchBot v2 — Complete Source Code
+DKTrenchBot v2 — Complete Source Code (FINAL BUILD)
 ================================================================================
-Build Date: April 9, 2026 — 21:27 UTC
-Commit: 0d3a593
+Build Date: April 9, 2026 — 21:45 UTC
+Commit: 001244a
 GitHub: https://github.com/domx1816-dev/dktrenchbot-v2
 
-This file contains ALL source code for the DKTrenchBot v2 trading bot.
-Each module is separated by clear delimiters for easy extraction.
+TRADING HOURS: 24/7 (ALL HOURS ENABLED)
+WALLET: rKQACag8Td9TrMxBwYJPGRMDV8cxGfKsmF
+CONFIG: SCORE_TRADEABLE=42, MIN_TVL=100, BLOCKED={trend}
 
-CONFIGURATION SUMMARY:
-- SCORE_TRADEABLE = 42 (captures 60% WR backtest band)
-- MIN_TVL_XRP = 100
-- BLOCKED_STRATEGIES = {trend}
-- MICRO_SCALP TPs: 2.5x→50%, 4.0x→100%
-- Safety: 5 consecutive losses, 8 XRP threshold, 2h auto-resume
-- Active modules: 27 Python files
-- Disabled: wallet_cluster, brain, shadow_ml, improve_loop, alpha_recycler
+This file contains ALL source code for DKTrenchBot v2.
+Each module separated by delimiters for easy extraction.
+
+ACTIVE MODULES (27):
+bot.py, config.py, scanner.py, classifier.py, scoring.py,
+execution.py, execution_core.py, dynamic_tp.py, dynamic_exit.py,
+sizing.py, safety.py, state.py, disagreement.py,
+pre_move_detector.py, regime.py, trustset_watcher.py,
+realtime_sniper.py, sniper.py, clob_tracker.py,
+xrpl_amm_discovery.py, new_wallet_discovery.py, wallet_intelligence.py,
+route_engine.py, reconcile.py, wallet_hygiene.py, report.py, ml_trainer.py
 
 BACKTEST TARGETS (Master Build v2, 14-day):
-- Trades: ~1,008
-- Win Rate: 46.9%
-- Net P&L: +2,848 XRP
-- Profit Factor: 5.30x
-- Return: +1,446%
+- Trades: ~1,008 | Win Rate: 46.9% | Net P&L: +2,848 XRP
+- Profit Factor: 5.30x | Return: +1,446%
 
 ================================================================================
 -e 
@@ -2404,7 +2405,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 -e 
 
 ================================================================================
@@ -2590,7 +2590,6 @@ ML_ENABLED = True  # Enable ML feature logging and (when ready) predictions
 #   trend:        18% WR |   -0.9 XRP ❌ BLOCKED (TVL > 200K = outside MC sweet spot)
 BLOCKED_STRATEGIES = {"trend"}       # hard block
 PREFERRED_STRATEGIES = {"burst", "pre_breakout"}  # primary signal sources
-
 -e 
 
 ================================================================================
@@ -3096,7 +3095,6 @@ if __name__ == "__main__":
     print(f"Dead:               {len(results['dead'])}")
     candidates = get_candidates(results)
     print(f"Candidates: {[c['symbol'] for c in candidates]}")
-
 -e 
 
 ================================================================================
@@ -3629,7 +3627,6 @@ def classify_and_route(candidate: Dict, price_history: list,
         "tp_targets":     tp_targets,
         "token":          token,  # pass Token object for further scoring
     }
-
 -e 
 
 ================================================================================
@@ -3918,7 +3915,6 @@ if __name__ == "__main__":
     )
     print(f"Score: {result['total']} ({result['band']})")
     print(f"Breakdown: {result['breakdown']}")
-
 -e 
 
 ================================================================================
@@ -4354,7 +4350,6 @@ if __name__ == "__main__":
     print("execution.py — import only for production use")
     print(f"Bot wallet: {BOT_WALLET_ADDRESS}")
     print("Route: AMM via Payment transaction (tfNoRippleDirect)")
-
 -e 
 
 ================================================================================
@@ -4526,7 +4521,6 @@ if __name__ == "__main__":
     print(f"  MIN_CONFIDENCE   : {MIN_CONFIDENCE}")
     print(f"  MIN_POSITION_XRP : {MIN_POSITION_XRP}")
     print(f"  MIN_LIQUIDITY_USD: ${MIN_LIQUIDITY_USD}")
-
 -e 
 
 ================================================================================
@@ -5098,8 +5092,7 @@ if __name__ == "__main__":
             current_price=current,
             current_tvl=5000,
         )
-        print(f"  {mult}x: {result}")
--e 
+        print(f"  {mult}x: {result}")-e 
 
 ================================================================================
 FILE: dynamic_exit.py
@@ -5332,7 +5325,6 @@ def update_peak(position: Dict, current_price: float) -> Dict:
     if current_price > position.get("peak_price", 0):
         position["peak_price"] = current_price
     return position
-
 -e 
 
 ================================================================================
@@ -5497,7 +5489,6 @@ if __name__ == "__main__":
         size = calculate_position_size(ex["score"], ex["bal"], ex["inputs"])
         print(f"  {ex['label']}")
         print(f"  → {size:.2f} XRP ({size/ex['bal']*100:.1f}% of balance)\n")
-
 -e 
 
 ================================================================================
@@ -5842,7 +5833,6 @@ if __name__ == "__main__":
         print(json.dumps(result, indent=2))
     else:
         print("No AMM found for SOLO")
-
 -e 
 
 ================================================================================
@@ -5999,7 +5989,6 @@ if __name__ == "__main__":
     print(f"Trades: {len(s['trade_history'])}")
     print(f"Win rate: {s['performance']['win_rate']:.1%}")
     print(f"PnL: {s['performance']['total_pnl_xrp']:.4f} XRP")
-
 -e 
 
 ================================================================================
@@ -6358,7 +6347,6 @@ def evaluate(
         "confidence_adj": confidence_adj,
         "checks":         checks,
     }
-
 -e 
 
 ================================================================================
@@ -6826,8 +6814,7 @@ def inject_to_bot():
         except Exception:
             pass
     
-    return result
--e 
+    return result-e 
 
 ================================================================================
 FILE: regime.py
@@ -6959,7 +6946,6 @@ if __name__ == "__main__":
     regime = update_and_get_regime(s, candidates_above_70=3)
     print(f"Regime: {regime}")
     print(json.dumps(get_regime_adjustments(regime), indent=2))
-
 -e 
 
 ================================================================================
@@ -7213,7 +7199,6 @@ if __name__ == "__main__":
     print(f"\n  At launch, PHX had 137 TrustSets in first 1h")
     print(f"  Seed XRP: 51.14 | Move: +2208x over 4 days")
     print(f"  Entry at 5 XRP → potential ~11,000 XRP return")
-
 -e 
 
 ================================================================================
@@ -7658,7 +7643,6 @@ def on_clob_launch(symbol: str, currency: str, issuer: str,
         name=f"rt-sniper-{symbol}",
         daemon=True,
     ).start()
-
 -e 
 
 ================================================================================
@@ -7862,7 +7846,6 @@ if __name__ == "__main__":
         sniper_loop(callback=on_hit)
     except KeyboardInterrupt:
         print("Sniper stopped")
-
 -e 
 
 ================================================================================
@@ -8088,7 +8071,6 @@ def get_clob_vol_5min(currency: str, issuer: str) -> float:
     with _lock:
         pts = _buy_times.get(key, [])
         return sum(v for t, v, p in pts if now - t <= CLOB_VOL_WINDOW)
-
 -e 
 
 ================================================================================
@@ -8516,7 +8498,6 @@ if __name__ == "__main__":
     for i, t in enumerate(sorted(tokens, key=lambda x: -x.get('tvl_xrp',0))[:30], 1):
         print(f"{i:3}. {t['name']:15} {t.get('tvl_xrp',0):>12,.0f}  {t.get('source','?')}")
     print(f"\nSmall-cap runners (200-5000 XRP TVL): {len([t for t in tokens if 200 <= t.get('tvl_xrp',0) <= 5000])}")
-
 -e 
 
 ================================================================================
@@ -8938,7 +8919,6 @@ if __name__ == "__main__":
         "tracked": len(result["tracked"]),
         "tracked_addresses": result["tracked"][:10],
     }, indent=2))
-
 -e 
 
 ================================================================================
@@ -9465,7 +9445,6 @@ if __name__ == "__main__":
         flag_str = ",".join(h["flags"]) if h["flags"] else "-"
         print(f"    {h['address'][:18]}  {h['pct']:5.1f}%  score={h['wallet_score']:3d}  "
               f"age={h['age']:12}  tokens={h['token_count']:3d}  xrp={h['xrp_balance']:8.1f}  [{flag_str}]")
-
 -e 
 
 ================================================================================
@@ -9691,7 +9670,6 @@ if __name__ == "__main__":
         print(json.dumps(result, indent=2))
     else:
         print("No AMM for SOLO")
-
 -e 
 
 ================================================================================
@@ -9920,7 +9898,6 @@ if __name__ == "__main__":
     s = state_mod.load()
     result = reconcile(s)
     print(result)
-
 -e 
 
 ================================================================================
@@ -10126,7 +10103,6 @@ if __name__ == "__main__":
     s = state_mod.load()
     result = run_hygiene(s, force=True)
     print(result)
-
 -e 
 
 ================================================================================
@@ -10303,7 +10279,6 @@ def generate_report(bot_state: Dict) -> str:
 if __name__ == "__main__":
     s = state_mod.load()
     print(generate_report(s))
-
 -e 
 
 ================================================================================
@@ -10504,4 +10479,3 @@ if __name__ == "__main__":
         print(f"  Top features: {sorted(model['feature_weights'].items(), key=lambda x: abs(x[1]), reverse=True)[:5]}")
     else:
         print("No model trained (insufficient data)")
-
