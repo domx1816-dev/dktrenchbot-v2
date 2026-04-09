@@ -777,3 +777,42 @@ LESSONS:
   - State consistency: Reconcile is critical for catching drift between
     on-chain reality and local state — never skip or disable it
 ═══════════════════════════════════════════════════════════════
+
+================================================================================
+CRITICAL EXECUTION FIXES — 2026-04-09 15:30 UTC
+================================================================================
+
+## Problem
+Live bot was failing to execute burst/pre_breakout/micro_scalp strategies due to:
+1. Gate 7 blocking CLOB-only tokens (brizzly had AMM but amm_info RPC failed)
+2. temBAD_AMOUNT → temBAD_SIGNATURE retry cascade on malformed transactions
+3. CLIO amm_info RPC returning actNotFound for valid AMMs (issuer-as-AMM pattern)
+
+## Fixes Applied
+
+### 1. Scanner AMM Fallback (scanner.py)
+- Added fallback when amm_info RPC fails (CLIO bug with issuer-as-AMM accounts)
+- Queries issuer account_info for AMMID flag
+- If issuer IS the AMM, constructs synthetic AMM dict from direct balance queries
+- Verified working: brizzly AMM detected (685 XRP + 119K tokens = 1,370 XRP TVL)
+
+### 2. Gate 7 Relaxed (realtime_sniper.py)
+- CLOB-only tokens now allowed with warning (Payment can route via order book)
+- AMM tokens verified for minimum 50 XRP pool depth
+- Prevents blocking valid tokens that have AMMs but fail amm_info RPC
+
+### 3. Transaction Retry Fix (execution.py)
+- _submit_with_retry no longer retries on tem* (malformed) errors
+- Sequence number already consumed on malformed tx — retry produces temBAD_SIGNATURE
+- Added debug logging for Payment transaction details
+
+## Results
+- DKLEDGER entry at 15:25 UTC: 15 XRP buy successful @ 0.00001651
+- Position up 15% within 10 minutes (price: 0.00001902)
+- Burst signal fired correctly at 50 TS/5min threshold
+- Bot now aligned with backtest configuration for live execution
+
+## Git Commit
+943ad05 — CRITICAL FIXES Apr 9 2026
+
+*Last updated: 2026-04-09 15:30 UTC*
