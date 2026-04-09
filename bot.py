@@ -739,6 +739,17 @@ def run_cycle(bot_state: Dict) -> Dict:
                 break
 
             symbol = candidate["symbol"]
+            # ── Hex symbol decode: XRPL currencies can be 40-char hex strings.
+            # The memecoin/stablecoin filters compare against human-readable names,
+            # so we must decode hex → ASCII here before ANY filter checks.
+            if isinstance(symbol, str) and len(symbol) == 40 and all(c in "0123456789ABCDEFabcdef" for c in symbol):
+                try:
+                    _decoded = bytes.fromhex(symbol).rstrip(b"\x00").decode("utf-8", errors="replace")
+                    if _decoded and _decoded.isprintable():
+                        symbol = _decoded
+                        candidate["symbol"] = symbol  # update in-place so downstream uses decoded name
+                except Exception:
+                    pass
             issuer = candidate["issuer"]
             currency = candidate.get("currency", "")
             key    = _token_key(candidate)
@@ -1069,6 +1080,50 @@ def run_cycle(bot_state: Dict) -> Dict:
                     else:
                         logger.info(f"SKIP {symbol}: chart_state={chart_state} (burst={_burst_count}, momentum={_offer_count}) — need pre_breakout or realtime signal")
                         continue
+
+                # ── TVL HARD FLOOR — kill $0 MC / near-zero liquidity tokens ──
+                # Operator directive: focus on $400–$2K MC sweet spot.
+                # Any token with TVL < 400 XRP has essentially $0 market cap —
+                # no liquidity, no real price discovery. Hard skip.
+                _entry_tvl = candidate.get("tvl_xrp", tvl)
+                if _entry_tvl < 400:
+                    logger.info(f"SKIP {symbol}: TVL={_entry_tvl:.0f} XRP < 400 XRP floor ($0 MC zone) — not our tier")
+                    continue
+
+                # ── TVL TIER GATE — ghost/micro/small with score band 42-52 ──
+                # Operator directive (Apr 9): only trade these three tiers:
+                #   ghost  (<500 XRP TVL)       — allowed only with strong burst signal
+                #   micro  (500–2000 XRP TVL)   — core sweet spot
+                #   small  (2000–10000 XRP TVL) — secondary sweet spot
+                # Score band: 42–52. Pre-breakout chart_state requires score ≥ 45.
+                # Tokens with TVL > 10K XRP are stale/discovered — hard skip.
+                _tier_tvl = _entry_tvl
+                if _tier_tvl > 10_000:
+                    logger.info(f"SKIP {symbol}: TVL={_tier_tvl:.0f} XRP > 10K — outside target tiers (ghost/micro/small)")
+                    continue
+
+                # Classify tier
+                if _tier_tvl < 500:
+                    _tvl_tier = "ghost"
+                    # Ghost tier: only trade on strong burst signal (≥10 TS/5min or realtime)
+                    _is_ghost_burst = (candidate.get("_burst_mode") or candidate.get("_clob_launch")
+                                       or candidate.get("signal_type") == "trustset_velocity")
+                    if not _is_ghost_burst:
+                        logger.info(f"SKIP {symbol}: ghost tier TVL={_tier_tvl:.0f} XRP — needs burst/realtime signal, not in scan")
+                        continue
+                elif _tier_tvl <= 2_000:
+                    _tvl_tier = "micro"
+                else:
+                    _tvl_tier = "small"
+
+                candidate["_tvl_tier"] = _tvl_tier
+                logger.debug(f"  [tier] {symbol}: {_tvl_tier} TVL={_tier_tvl:.0f} XRP")
+
+                # Pre-breakout score gate: ≥45 required (backtest best WR tier)
+                _chart = candidate.get("chart_state", chart_state)
+                if _chart == "pre_breakout" and total_score < 45:
+                    logger.info(f"SKIP {symbol}: pre_breakout score={total_score} < 45 gate — backtest data requires ≥45 for WR")
+                    continue
 
                 # ── MEMECOIN FILTER — strict XRPL meme-only gate ─────────────
                 # Operator directive: strictly memecoins only. No utility, no
