@@ -117,6 +117,8 @@ import improve as improve_mod
 import report as report_mod
 import sniper as sniper_mod
 # import brain  # DISABLED — no trained ML model yet (need 50+ trades first)
+import ml_trainer as ml_trainer_mod
+_ml_model = None  # Will be loaded/trained when enough data available
 
 # ── New Modules (Audit Improvements) ───────────────────────────────────────────
 import new_wallet_discovery as wallet_discovery_mod
@@ -139,6 +141,14 @@ except Exception as _shadow_ml_err:
 
 # DISABLED — improve_loop removed for optimization
 _IMPROVE_LOOP_AVAILABLE = False
+
+# ── ML Model Training Check ──────────────────────────────────────────────────
+# Auto-trains XGBoost-like model when 50+ completed trades available
+_ml_model = ml_trainer_mod.load_model()  # Load existing model if any
+if _ml_model:
+    logger.info(f"ML model loaded: trained on {_ml_model.get('num_trades', 0)} trades, base WR: {_ml_model.get('base_win_rate', 0):.1%}")
+else:
+    logger.info("No ML model yet — will auto-train when 50+ trades completed")
 
 # ── Improvement Loop ──────────────────────────────────────────────────────────
 try:
@@ -381,13 +391,16 @@ def run_cycle(bot_state: Dict) -> Dict:
         except Exception as _ile:
             logger.debug(f"[improve_loop] error (non-fatal): {_ile}")
 
-    # ── 0f. ML retrain check (every 20th cycle) ────────────────────────────────
+    # ── 0f. ML model training check (every 20th cycle) ───────────────────────
     if _cycle_count % 20 == 0:
-        if _ML_AVAILABLE:
-            try:
-                ml_model_mod.maybe_retrain()
-            except Exception as _mle:
-                logger.debug(f"[ml] retrain check: {_mle}")
+        try:
+            global _ml_model
+            new_model = ml_trainer_mod.check_and_train()
+            if new_model:
+                _ml_model = new_model
+                logger.info(f"🧠 ML model trained/updated: {new_model.get('num_trades', 0)} trades, base WR: {new_model.get('base_win_rate', 0):.1%}")
+        except Exception as _mle:
+            logger.debug(f"[ml] training check: {_mle}")
 
     # ── 0e. Wallet Discovery refresh (every 20th cycle ~20min) — Audit #1 ─────
     if _cycle_count % 20 == 4:
@@ -1463,6 +1476,35 @@ def run_cycle(bot_state: Dict) -> Dict:
 
             except Exception as _cge:
                 logger.debug(f"Confirmation gate error {symbol}: {_cge}")
+
+            # ── ML Prediction filter (if model trained) ───────────────────────
+            if _ml_model and total_score >= SCORE_TRADEABLE:
+                try:
+                    # Build features for prediction
+                    ml_features = {
+                        "score": total_score / 100.0,  # normalize to 0-1
+                        "tvl_xrp": tvl / 10000.0 if tvl > 0 else 0,  # normalize
+                        "momentum": candidate.get("momentum_score", 0) / 100.0,
+                        "ts_burst_1h": min(candidate.get("ts_burst_1h", 0) / 50.0, 1.0),
+                        "concentration_pct": candidate.get("concentration_pct", 0) / 100.0,
+                        "strategy_burst": 1 if candidate.get("_godmode_type") == "burst" else 0,
+                        "strategy_pre_breakout": 1 if candidate.get("_godmode_type") == "pre_breakout" else 0,
+                        "strategy_micro_scalp": 1 if candidate.get("_godmode_type") == "micro_scalp" else 0,
+                        "strategy_clob_launch": 1 if candidate.get("_godmode_type") == "clob_launch" else 0,
+                        "strategy_trend": 1 if candidate.get("_godmode_type") == "trend" else 0,
+                    }
+                    win_prob = ml_trainer_mod.predict_win_probability(_ml_model, ml_features)
+                    
+                    # Filter: only enter if predicted win probability > 55%
+                    ML_CONFIDENCE_THRESHOLD = 0.55
+                    if win_prob < ML_CONFIDENCE_THRESHOLD:
+                        logger.info(f"🧠 ML FILTER: {symbol} blocked — predicted WR {win_prob:.1%} < {ML_CONFIDENCE_THRESHOLD:.0%} threshold")
+                        continue
+                    else:
+                        logger.info(f"🧠 ML PASS: {symbol} — predicted WR {win_prob:.1%} (confidence OK)")
+                except Exception as _ml_err:
+                    logger.debug(f"[ml] prediction error for {symbol}: {_ml_err}")
+                    # Don't block on ML errors — fall through to normal execution
 
             # ── 5-6. Execute entry ────────────────────────────────────────────
             # ── Execution Core path (GodMode-authorized) ──────────────────────
