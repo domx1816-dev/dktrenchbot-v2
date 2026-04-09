@@ -148,7 +148,7 @@ def _global_avg_slippage() -> float:
 # EXECUTION INTELLIGENCE
 # ═══════════════════════════════════════════════════════════════
 
-def _update_execution_stats(trade: dict) -> None:
+def update_execution_stats(trade: dict) -> None:
     route    = trade.get("route", "default")
     expected = trade.get("entry_price", 1.0)
     actual   = trade.get("exit_price", expected)

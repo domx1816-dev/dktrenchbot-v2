@@ -420,8 +420,7 @@ def run_cycle(bot_state: Dict) -> Dict:
                 _entered = _shadow_ml.run_cycle(candidates, _market_data)
                 logger.info(f"👻 Shadow ML: evaluated {len(candidates)}, entered {_entered}")
             except Exception as _sle:
-                import traceback
-                logger.error(f"[shadow_ml] cycle error: {_sle}\n{traceback.format_exc()}")
+                logger.exception(f"[shadow_ml] cycle error: {_sle}")
 
         # ── Realtime CLOB entry trigger (fast movers) ────────────────────────
         _rt_trigger_file = os.path.join(STATE_DIR, "realtime_entry_trigger.json")
@@ -787,7 +786,7 @@ def run_cycle(bot_state: Dict) -> Dict:
                 # Route check
                 route = route_engine.evaluate_route(symbol, issuer, amm, xrp_size)
                 # brain.select_best_route() integration point — use when route_engine exposes multi-route API
-                _selected = brain.select_best_route([route]) if route else None
+                _selected = brain.select_best_route(["primary"]) if route else None
                 brain.update_execution_stats({"route": "primary", "slippage": route.get("best_slippage", 0)})
                 if not route.get("trade_ok"):
                     logger.info(f"SKIP {symbol}: route fail — {route.get('reject_reason')}")
@@ -1207,7 +1206,7 @@ def run_cycle(bot_state: Dict) -> Dict:
                         logger.debug(f"  [learn] size mult {learn_size_mult:.2f}x → {final_size:.2f} XRP")
 
                 # Pool safety + adaptive sizing (learn_engine) -- BEFORE final_size check
-                _pool_key = symbol + ":" + str(token.get("issuer", token.get("currency","")))
+                _pool_key = symbol + ":" + str(issuer)
                 _pool_tok = {"key": _pool_key, "pool_id": _pool_key}
                 if not brain.is_pool_safe(_pool_tok):
                     logger.info(f"POOL_UNSAFE {symbol}: pool behavior -- skipped")
