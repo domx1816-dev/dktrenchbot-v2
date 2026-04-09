@@ -49,12 +49,14 @@ POOL_VOL_THRESHOLD = 0.5   # volatility > 0.5 = unsafe
 
 # Strategy base risk (used in position_sizer)
 STRATEGY_BASE_RISK = {
-    "burst":        0.20,
-    "clob_launch":  0.20,
-    "pre_breakout": 0.15,
-    "trend":        0.12,
-    "micro_scalp":  0.06,
-    "none":         0.06,
+    # Reduced 40% from originals — protect capital until WR stabilizes
+    # Avg position was 9.5 XRP on 200 XRP wallet = 4.75% per trade (correct target)
+    "burst":        0.05,   # was 0.20 — BURST is high WR but micro-caps need small size
+    "clob_launch":  0.05,   # was 0.20
+    "pre_breakout": 0.04,   # was 0.15
+    "trend":        0.04,   # was 0.12
+    "micro_scalp":  0.03,   # was 0.06
+    "none":         0.03,   # was 0.06
 }
 
 # ═══════════════════════════════════════════════════════════════

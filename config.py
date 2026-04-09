@@ -50,14 +50,14 @@ MIN_TVL_DROP_EXIT  = 0.40   # exit if TVL drops >40% in one cycle (pool draining
 
 # ── Exit System — 4-tier TP + Tight Stale ─────────────────────────────────────
 # DATA: Stale exits = 40% of trades, all losses. Cut timer in half.
-STALE_EXIT_HOURS   = 0.97   # improve_loop: 4 stale exits averaged 1.9hr hold, all lost. Recover ~-3.97 XRP by tightening.
-MAX_HOLD_HOURS     = 4.0    # absolute cap (was 6hr)
+STALE_EXIT_HOURS   = 3.0    # raised from 0.97hr — stale exits at 1hr were killing flat-but-valid positions
+MAX_HOLD_HOURS     = 12.0   # extended — PHX-type runners need 8-12hr to fully develop
 
 HARD_STOP_PCT = 15   # warden tightened: loss > win
-HARD_STOP_EARLY_PCT = 0.10  # -10% in first 30 min
+HARD_STOP_EARLY_PCT = 0.15  # raised from 10% — was firing too early, matching main hard stop
 HARD_STOP_GRACE_SEC = 1800  # 30 min early stop window
 
-TRAIL_STOP_PCT     = 0.20   # -20% trailing from peak
+TRAIL_STOP_PCT     = 0.25   # widened from 20% — micro-caps swing 20% normally, was noise-tripping
 
 # 4-tier TP — let real runners go to 600%+
 TP1_PCT            = 0.20   # +20% → sell 30%
@@ -162,7 +162,7 @@ TRACKED_WALLETS: List[str] = []
 DYNAMIC_TP_ENABLED = True  # Enable 3-layer dynamic take-profit system
 
 # ── Confidence-Based Position Sizing ─────────────────────────────────────────
-MAX_POSITION_XRP = 40.0  # Hard ceiling for any single position
+MAX_POSITION_XRP = 15.0  # Hard ceiling per trade — reduced from 40 to protect capital
 
 # ── ML Pipeline ───────────────────────────────────────────────────────────────
 ML_ENABLED = True  # Enable ML feature logging and (when ready) predictions

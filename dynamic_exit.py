@@ -150,18 +150,18 @@ def check_exit(position: Dict, current_price: float,
     xrp_spent    = float(position.get("xrp_spent", 0) or 0)
     pnl_xrp_est  = xrp_spent * pnl_pct  # rough XRP P&L estimate
 
-    if pnl_xrp_est < -1.0:
-        dynamic_stale = 2.0            # bleeding — cut at 2h
-    elif pnl_xrp_est < -0.3:
-        dynamic_stale = STALE_EXIT_HOURS  # small loss — normal 3h
-    elif pnl_xrp_est > 2.0:
-        dynamic_stale = MAX_HOLD_HOURS # strong winner — max hold
-    elif pnl_xrp_est > 0.3:
-        dynamic_stale = 8.0            # positive — let it breathe
+    if pnl_xrp_est < -3.0:
+        dynamic_stale = 2.0            # deep bleed (-3+ XRP) — cut at 2h
+    elif pnl_xrp_est < -1.5:
+        dynamic_stale = STALE_EXIT_HOURS  # moderate loss — normal timer
+    elif pnl_xrp_est > 3.0:
+        dynamic_stale = MAX_HOLD_HOURS # strong winner — max hold (12hr)
+    elif pnl_xrp_est > 0.5:
+        dynamic_stale = 10.0           # positive — let it breathe
     else:
-        dynamic_stale = STALE_EXIT_HOURS  # flat — normal timer
+        dynamic_stale = STALE_EXIT_HOURS  # flat — normal 3hr timer
 
-    if hold_hours >= dynamic_stale and pnl_pct < 0.02:
+    if hold_hours >= dynamic_stale and pnl_pct < -0.02:  # only stale-exit losers, not flat/small-gain positions
         return _exit_signal(f"stale_{hold_hours:.1f}hr", 1.0)
 
     # Max hold: absolute time limit

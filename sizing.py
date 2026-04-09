@@ -13,13 +13,16 @@ from typing import Dict
 logger = logging.getLogger("sizing")
 
 # Position sizing as % of available balance
-BASE_PCT_ELITE = 0.20   # 20% of balance for elite (score≥65)
-BASE_PCT_NORMAL = 0.12  # 12% of balance for normal (score≥50)
-BASE_PCT_SMALL = 0.06   # 6% of balance for small (score≥40)
-BASE_PCT_SCALP = 0.03   # 3% of balance for scalp/micro
+# Reduced from 20/12/6/3% — avg 9.5 XRP on 200 XRP wallet was 4.75%
+# but stale exits at -1.29 XRP avg mean each loss = 13.5% of intended size
+# Target: max 5% per trade on standard, 8% on elite burst signals
+BASE_PCT_ELITE = 0.08   # 8% of balance for elite (score≥65) — was 20%
+BASE_PCT_NORMAL = 0.05  # 5% of balance for normal (score≥50) — was 12%
+BASE_PCT_SMALL = 0.03   # 3% of balance for small (score≥40) — was 6%
+BASE_PCT_SCALP = 0.02   # 2% of balance for scalp/micro — was 3%
 
 # Hard limits per position (safety ceiling)
-MAX_POSITION_XRP = 100.0  # Absolute max per trade
+MAX_POSITION_XRP = 15.0   # Hard cap per trade — was 100, protect capital
 MIN_POSITION_XRP = 3.0    # Minimum viable position
 
 
