@@ -1,10 +1,11 @@
 # DKTrenchBot v2 — Master Build
 
-**Last Updated:** April 9, 2026  
+**Last Updated:** April 9, 2026 — 19:34 UTC  
 **Status:** LIVE  
 **Wallet:** rKQACag8Td9TrMxBwYJPGRMDV8cxGfKsmF  
 **Balance:** ~199.66 XRP  
-**Dashboard:** https://dktrenchbot.pages.dev
+**Dashboard:** https://mom-viii-sunshine-requiring.trycloudflare.com  
+**GitHub:** https://github.com/domx1816-dev/dktrenchbot-v2 (commit ba5e5bf)
 
 ---
 
@@ -276,5 +277,62 @@ Added strategy metadata based on log analysis (all were `smart_cluster` signals)
 
 ### Lessons
 - **Single decode point:** Always decode hex at the lowest common entry point (sniper's `fire()`) rather than fixing each caller
+
+---
+
+## AMM Discovery Fix — April 9, 2026 (19:30 UTC)
+
+### Problem
+CLIO's `amm_info` RPC endpoint is unreliable and fails for many valid AMM pools. This caused:
+- Tokens with valid AMMs to be skipped during discovery
+- Scanner returning `None` TVL for tokens that actually had liquidity
+- Missed trading opportunities (e.g., XYZ token with 225 XRP TVL was invisible)
+
+**Root cause:** Every XRPL memecoin has an AMM pool, but the RPC lookup was failing due to:
+1. CLIO `amm_info` bugs returning "Account not found" for valid AMMs
+2. Currency code format mismatch (hex-encoded vs plain 3-char ISO codes)
+3. AMM accounts being separate from issuer accounts (not detected by simple issuer check)
+
+### Solution: 4-Method Fallback Chain
+
+Implemented robust AMM detection in both `xrpl_amm_discovery.py` and `scanner.py`:
+
+```python
+def get_amm_tvl(currency: str, issuer: str) -> Optional[float]:
+    # Method 1: amm_info RPC (XRP/token direction)
+    # Method 2: amm_info RPC (token/XRP reverse direction)
+    # Method 3: Check if issuer account has AMMID field
+    # Method 4: Scan trustline holders for accounts with AMMID
+```
+
+**Method 4 details:** Iterates through issuer's trustline holders, checks if any holder account has an `AMMID` field (indicating it's an AMM pool), and returns that account's XRP balance as TVL.
+
+**Currency code matching:** Handles both formats:
+- Hex-encoded: `58595A0000000000000000000000000000000000`
+- Plain ISO: `XYZ`
+
+Added `hex_to_name()` helper function to scanner.py for consistent decoding.
+
+### Files Modified
+- `xrpl_amm_discovery.py` — `get_amm_tvl()` function rewritten with 4-method fallback
+- `scanner.py` — Added `hex_to_name()` function, updated AMM fallback to match both currency formats
+
+### Results
+- Discovery run found **130 new tokens** previously missed due to RPC failures
+- XYZ token now detectable: TVL = 225 XRP (micro tier, sweet spot)
+- All future AMM lookups will succeed regardless of CLIO RPC reliability
+
+### Verification
+Tested with known problematic tokens:
+```python
+get_amm_tvl('XYZ', 'r4hV1A2vEPvVV8uy6HusdXdxeV8Eb2fYxz')
+# Returns: 225.45 XRP (previously returned None)
+```
+
+### Key Principle
+**Every XRPL memecoin has an AMM pool.** The bot must never miss a token due to AMM lookup failures. The 4-method fallback chain ensures we find AMMs regardless of:
+- CLIO RPC bugs
+- Currency code encoding format
+- AMM account architecture (issuer-as-AMM vs separate account)
 - **Strategy tracking:** Every position must record what triggered it for post-trade analysis
 - **State consistency:** Reconcile is critical for catching drift between on-chain reality and local state

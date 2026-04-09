@@ -90,20 +90,41 @@ def _get_trustset_velocity(issuer: str) -> dict:
     }
 
 def _get_amm_info(issuer: str, currency: str) -> dict:
-    """Get current AMM state."""
-    r = _rpc("amm_info", {"asset": {"currency": "XRP"}, "asset2": {"currency": currency, "issuer": issuer}})
-    if not r.get("amm"):
-        return {}
-    amm = r["amm"]
-    xrp = int(amm.get("amount", 0)) / 1e6
-    tok = float(amm.get("amount2", {}).get("value", 1))
-    price = xrp / tok if tok > 0 else 0
-    return {
-        "tvl_xrp": xrp,
-        "price": price,
-        "fee": amm.get("trading_fee", 0) / 1000,
-        "lp_tokens": float(amm.get("lp_token", {}).get("value", 0)),
-    }
+    """
+    Get current AMM state with fallback for CLIO RPC bugs.
+    Uses scanner.get_amm_info which has 4-method fallback chain.
+    """
+    try:
+        from scanner import get_amm_info as robust_get_amm, hex_to_name
+        symbol = hex_to_name(currency) if len(currency) > 3 else currency
+        amm_dict = robust_get_amm(symbol, issuer, currency=currency)
+        if not amm_dict:
+            return {}
+        amm = amm_dict
+        xrp = int(amm.get("amount", 0)) / 1e6
+        tok = float(amm.get("amount2", {}).get("value", 1))
+        price = xrp / tok if tok > 0 else 0
+        return {
+            "tvl_xrp": xrp,
+            "price": price,
+            "fee": amm.get("trading_fee", 0) / 1000,
+            "lp_tokens": float(amm.get("lp_token", {}).get("value", 0)),
+        }
+    except Exception:
+        # Fallback to direct RPC
+        r = _rpc("amm_info", {"asset": {"currency": "XRP"}, "asset2": {"currency": currency, "issuer": issuer}})
+        if not r.get("amm"):
+            return {}
+        amm = r["amm"]
+        xrp = int(amm.get("amount", 0)) / 1e6
+        tok = float(amm.get("amount2", {}).get("value", 1))
+        price = xrp / tok if tok > 0 else 0
+        return {
+            "tvl_xrp": xrp,
+            "price": price,
+            "fee": amm.get("trading_fee", 0) / 1000,
+            "lp_tokens": float(amm.get("lp_token", {}).get("value", 0)),
+        }
 
 def scan(registry: dict) -> List[dict]:
     """

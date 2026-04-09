@@ -329,11 +329,21 @@ def analyze_token(symbol: str, currency: str, issuer: str) -> dict:
 
     logger.info(f"[wallet_intel] Analyzing {symbol} holders...")
 
-    # ── Get AMM pool account ──────────────────────────────────────────────
+    # ── Get AMM pool account (with fallback for CLIO RPC bugs) ────────────
     amm_pool = ""
-    amm_res = _rpc("amm_info", {"asset": {"currency": "XRP"}, "asset2": {"currency": currency, "issuer": issuer}})
-    if amm_res.get("amm"):
-        amm_pool = amm_res["amm"].get("account", "")
+    try:
+        from scanner import get_amm_info as robust_get_amm, hex_to_name
+        sym = hex_to_name(currency) if len(currency) > 3 else currency
+        amm_dict = robust_get_amm(sym, issuer, currency=currency)
+        if amm_dict:
+            # Try to get AMM account from the dict
+            # If scanner returned a full AMM object, it has 'account' field
+            amm_pool = amm_dict.get("account", "")
+    except Exception:
+        # Fallback to direct RPC
+        amm_res = _rpc("amm_info", {"asset": {"currency": "XRP"}, "asset2": {"currency": currency, "issuer": issuer}})
+        if amm_res.get("amm"):
+            amm_pool = amm_res["amm"].get("account", "")
 
     # ── Get all holders ───────────────────────────────────────────────────
     lines_res = _rpc("account_lines", {"account": issuer, "limit": 400})

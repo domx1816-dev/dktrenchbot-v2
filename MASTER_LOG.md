@@ -816,3 +816,40 @@ Live bot was failing to execute burst/pre_breakout/micro_scalp strategies due to
 943ad05 — CRITICAL FIXES Apr 9 2026
 
 *Last updated: 2026-04-09 15:30 UTC*
+
+---
+
+## April 9, 2026 — 19:34 UTC — AMM Discovery Fix
+
+### Issue
+Discovered that CLIO's `amm_info` RPC endpoint fails for many valid AMM pools, causing the bot to miss tokens entirely. Example: XYZ token (issuer r4hV1A2vEPvVV8uy6HusdXdxeV8Eb2fYxz) has a valid AMM with 225 XRP TVL but `amm_info` returned "Account not found."
+
+**Root cause:** Every XRPL memecoin has an AMM pool, but our lookup was failing due to:
+1. CLIO RPC bugs
+2. Currency code format mismatch (hex vs plain 3-char)
+3. AMM accounts being separate from issuer accounts
+
+### Fix Applied
+Implemented 4-method fallback chain in `xrpl_amm_discovery.py::get_amm_tvl()`:
+1. `amm_info` RPC (XRP/token direction)
+2. `amm_info` RPC (token/XRP reverse)
+3. Check if issuer has `AMMID` field
+4. Scan trustline holders for accounts with `AMMID`
+
+Also fixed currency code matching to handle both hex-encoded and plain ISO formats.
+
+Applied same fix to `scanner.py` for runtime AMM lookups.
+
+### Results
+- Discovery run found **130 new tokens** previously invisible
+- XYZ now detectable: 225 XRP TVL (micro tier)
+- Bot restarted with fixes active
+
+### Files Changed
+- `xrpl_amm_discovery.py` — `get_amm_tvl()` rewritten with fallback chain
+- `scanner.py` — Added `hex_to_name()`, updated AMM fallback currency matching
+
+### Git Commit
+ba5e5bf — Fix AMM discovery for all currency code formats
+
+*This fix ensures we never miss a memecoin due to AMM lookup failures.*

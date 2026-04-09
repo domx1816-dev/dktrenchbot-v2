@@ -80,25 +80,51 @@ def _decode_currency(cur):
 
 
 def _get_amm_state(addr, currency_hex):
+    """
+    Get AMM state with fallback for CLIO RPC bugs.
+    Uses scanner.get_amm_info which has 4-method fallback chain.
+    """
     if not currency_hex or not addr:
         return None
-    amm = _rpc("amm_info", {
-        "asset": {"currency": "XRP"},
-        "asset2": {"currency": currency_hex, "issuer": addr},
-        "ledger_index": "validated"
-    })
-    a = amm.get("amm", {})
-    if not a:
-        return None
-    xrp_pool = int(a.get("amount", 0)) / 1e6
-    tok_pool = float(a.get("amount2", {}).get("value", 0))
-    price = xrp_pool / tok_pool if tok_pool > 0 else 0
-    lp_supply = float(a.get("lp_token", {}).get("value", 0))
-    fee = int(a.get("trading_fee", 0)) / 10
-    return {
-        "xrp_pool": xrp_pool, "token_pool": tok_pool, "price": price,
-        "lp_supply": lp_supply, "trading_fee": fee, "tvl": xrp_pool * 2
-    }
+    
+    # Import scanner's robust AMM lookup
+    try:
+        from scanner import get_amm_info, hex_to_name
+        # Try to find symbol from currency hex
+        symbol = hex_to_name(currency_hex) if len(currency_hex) > 3 else currency_hex
+        amm_dict = get_amm_info(symbol, addr, currency=currency_hex)
+        if not amm_dict:
+            return None
+        
+        a = amm_dict
+        xrp_pool = int(a.get("amount", 0)) / 1e6
+        tok_pool = float(a.get("amount2", {}).get("value", 0))
+        price = xrp_pool / tok_pool if tok_pool > 0 else 0
+        lp_supply = float(a.get("lp_token", {}).get("value", 0))
+        fee = int(a.get("trading_fee", 0)) / 10
+        return {
+            "xrp_pool": xrp_pool, "token_pool": tok_pool, "price": price,
+            "lp_supply": lp_supply, "trading_fee": fee, "tvl": xrp_pool * 2
+        }
+    except Exception as e:
+        # Fallback to direct RPC if scanner import fails
+        amm = _rpc("amm_info", {
+            "asset": {"currency": "XRP"},
+            "asset2": {"currency": currency_hex, "issuer": addr},
+            "ledger_index": "validated"
+        })
+        a = amm.get("amm", {})
+        if not a:
+            return None
+        xrp_pool = int(a.get("amount", 0)) / 1e6
+        tok_pool = float(a.get("amount2", {}).get("value", 0))
+        price = xrp_pool / tok_pool if tok_pool > 0 else 0
+        lp_supply = float(a.get("lp_token", {}).get("value", 0))
+        fee = int(a.get("trading_fee", 0)) / 10
+        return {
+            "xrp_pool": xrp_pool, "token_pool": tok_pool, "price": price,
+            "lp_supply": lp_supply, "trading_fee": fee, "tvl": xrp_pool * 2
+        }
 
 
 def _get_ts_rate(addr, lookback_hours=2):
