@@ -432,19 +432,29 @@ def run_cycle(bot_state: Dict) -> Dict:
                 if _rt_age < 120:  # Only use triggers < 2 min old
                     _rt_key = f"{_rt_trigger.get('currency','')}:{_rt_trigger.get('issuer','')}"
                     if not any(c.get("key") == _rt_key for c in candidates):
+                        _rt_sym = _rt_trigger.get("symbol", "")
+                        _rt_cur = _rt_trigger.get("currency", "")
+                        _rt_iss = _rt_trigger.get("issuer", "")
+                        _rt_tvl = 0
+                        try:
+                            _, _rt_tvl, _, _ = scanner.get_token_price_and_tvl(_rt_sym, _rt_iss, currency=_rt_cur)
+                            _rt_tvl = _rt_tvl or 500
+                        except Exception:
+                            _rt_tvl = 500
                         _rt_cand = {
-                            "symbol": _rt_trigger.get("symbol", ""),
-                            "currency": _rt_trigger.get("currency", ""),
-                            "issuer": _rt_trigger.get("issuer", ""),
-                            "key": _rt_key,
-                            "tvl": 500,
-                            "price": _rt_trigger.get("price", 0),
-                            "score": 0,
-                            "_clob_launch": True,
-                            "_burst_mode": True,
-                            "burst_count": 30,
+                            "symbol":        _rt_sym,
+                            "currency":      _rt_cur,
+                            "issuer":        _rt_iss,
+                            "key":           _rt_key,
+                            "tvl_xrp":       _rt_tvl,
+                            "tvl":           _rt_tvl,
+                            "price":         _rt_trigger.get("price", 0),
+                            "score":         0,
+                            "_clob_launch":  True,
+                            "_burst_mode":   True,
+                            "burst_count":   30,
                             "clob_vol_5min": _rt_trigger.get("vol_5min_xrp", 0),
-                            "amm": {"amount": str(int(500 * 1e6)), "amount2": {"currency": _rt_trigger.get("currency",""), "issuer": _rt_trigger.get("issuer",""), "value": "1000000"}, "trading_fee": 1000, "account": _rt_trigger.get("issuer","")},
+                            "amm": {"amount": str(int(_rt_tvl * 1e6)), "amount2": {"currency": _rt_cur, "issuer": _rt_iss, "value": "1000000"}, "trading_fee": 1000, "account": _rt_iss},
                         }
                         candidates.append(_rt_cand)
                         dash_log(f"⚡ REALTIME CLOB: {_rt_trigger.get('symbol','')} injected")
@@ -544,12 +554,21 @@ def run_cycle(bot_state: Dict) -> Dict:
                             c["_burst_mode"] = True
                     continue
                 # Inject as burst candidate — will bypass chart_state gate below
+                # Fetch live TVL so burst candidates don't hit the >10K stale-zone skip
+                _burst_tvl = _alert.get("xrp_tvl", 0) or 0
+                if _burst_tvl <= 0:
+                    try:
+                        _, _burst_tvl, _, _ = scanner.get_token_price_and_tvl(_sym, _iss, currency=_cur)
+                        _burst_tvl = _burst_tvl or 500
+                    except Exception:
+                        _burst_tvl = 500
                 _burst_cand = {
                     "symbol":      _sym,
                     "currency":    _cur,
                     "issuer":      _iss,
                     "key":         _cand_key,
-                    "tvl":         _alert.get("xrp_tvl", 500),
+                    "tvl_xrp":     _burst_tvl,   # use tvl_xrp — what bot.py reads
+                    "tvl":         _burst_tvl,
                     "score":       0,  # will be scored below
                     "burst_count": _bc,
                     "_burst_mode": True,
@@ -584,12 +603,20 @@ def run_cycle(bot_state: Dict) -> Dict:
                             c["clob_vol_5min"] = _vol
                             c["clob_price"]   = _cprice
                     continue
+                # Fetch live TVL for CLOB candidates too
+                _clob_tvl = 0
+                try:
+                    _, _clob_tvl, _, _ = scanner.get_token_price_and_tvl(_sym, _iss, currency=_cur)
+                    _clob_tvl = _clob_tvl or 500
+                except Exception:
+                    _clob_tvl = 500
                 _clob_cand = {
                     "symbol":        _sym,
                     "currency":      _cur,
                     "issuer":        _iss,
                     "key":           _cand_key,
-                    "tvl":           500,
+                    "tvl_xrp":       _clob_tvl,   # real TVL — prevents stale-zone skip
+                    "tvl":           _clob_tvl,
                     "price":         _cprice if _cprice > 0 else None,
                     "score":         0,
                     "_clob_launch":  True,
@@ -597,7 +624,7 @@ def run_cycle(bot_state: Dict) -> Dict:
                     "burst_count":   _bc,
                     "clob_vol_5min": _vol,
                     # Synthesize AMM stub so safety check doesn't crash on missing AMM
-                    "amm": {"amount": str(int(500 * 1e6)), "amount2": {"currency": _cur, "issuer": _iss, "value": "1000000"}, "trading_fee": 1000, "account": _iss},
+                    "amm": {"amount": str(int(_clob_tvl * 1e6)), "amount2": {"currency": _cur, "issuer": _iss, "value": "1000000"}, "trading_fee": 1000, "account": _iss},
                 }
                 candidates.append(_clob_cand)
                 stype = _alert.get("signal_type", "clob_launch")
@@ -728,10 +755,29 @@ def run_cycle(bot_state: Dict) -> Dict:
                 price = candidate["clob_price"]
                 candidate["price"] = price
                 logger.debug(f"CLOB price fallback for {symbol}: {price:.8f}")
-            if not amm and candidate.get("_clob_launch"):
-                # Synthesize minimal AMM stub so safety/route don't crash
-                amm = {"amount": str(int(500 * 1e6)), "amount2": {"currency": currency, "issuer": issuer, "value": "1000000"}, "trading_fee": 1000, "account": issuer}
+
+            # For burst candidates without price — fetch live price now
+            if not price and candidate.get("_burst_mode"):
+                try:
+                    _bp, _bt, _, _ = scanner.get_token_price_and_tvl(symbol, issuer, currency=currency)
+                    if _bp and _bp > 0:
+                        price = _bp
+                        candidate["price"] = price
+                        if _bt and _bt > 0:
+                            candidate["tvl_xrp"] = _bt
+                            tvl = _bt
+                    logger.debug(f"Burst price fetch {symbol}: {price}")
+                except Exception:
+                    pass
+
+            # Synthesize AMM stub for burst/CLOB candidates so safety/routing don't crash
+            if not amm and (candidate.get("_burst_mode") or candidate.get("_clob_launch")):
+                _stub_tvl = candidate.get("tvl_xrp", tvl) or 500
+                amm = {"amount": str(int(_stub_tvl * 1e6)), "amount2": {"currency": currency, "issuer": issuer, "value": "1000000"}, "trading_fee": 1000, "account": issuer}
+
             if not amm or not price:
+                if candidate.get("_burst_mode") or candidate.get("_clob_launch"):
+                    logger.info(f"SKIP {symbol}: burst candidate — no price/AMM available")
                 continue
 
             # ── 3. Safety gate ────────────────────────────────────────────────
@@ -1108,9 +1154,14 @@ def run_cycle(bot_state: Dict) -> Dict:
                     continue
 
                 # BQ minimum filter — learned from session: BQ < 40 = unreliable signal
-                if bq < 40:
+                # BYPASS for burst/CLOB launch: these are NEW tokens with no price history.
+                # BQ is meaningless at launch — the signal IS the burst count + volume.
+                _is_burst_signal = candidate.get("_burst_mode") or candidate.get("_clob_launch")
+                if bq < 40 and not _is_burst_signal:
                     logger.info(f"SKIP {symbol}: bq={bq} < 40 minimum (weak breakout quality)")
                     continue
+                elif bq < 40 and _is_burst_signal:
+                    logger.info(f"  ⚡ BQ bypass {symbol}: bq={bq} but burst/CLOB signal — proceeding")
 
                 # ── Velocity Detector ─────────────────────────────────────────
                 # Fast movers (+8%+ in 1h) get score boost — catches BPHX-style runners
@@ -1165,8 +1216,15 @@ def run_cycle(bot_state: Dict) -> Dict:
                     final_size = PROVEN_TOKEN_RELOAD_XRP * adj.get("size_mult", 1.0) * size_mult_global
                     logger.info(f"  🏆 PROVEN reload: {symbol} → hold mode, size={final_size:.1f} XRP")
                 elif _trade_mode == "skip":
-                    logger.info(f"SKIP {symbol}: TVL={_tvl:.0f} stale zone (>10K, no growth) — data: 0% WR")
-                    continue
+                    # Burst/CLOB signals bypass stale-zone: real TVL may be low,
+                    # but default 99999 was polluting the check. If it's a burst
+                    # with real TVL now, allow it.
+                    if candidate.get("_burst_mode") or candidate.get("_clob_launch"):
+                        _trade_mode = "hold"
+                        logger.info(f"  ⚡ Stale-zone bypass {symbol}: burst/CLOB signal overrides TVL={_tvl:.0f}")
+                    else:
+                        logger.info(f"SKIP {symbol}: TVL={_tvl:.0f} stale zone (>10K, no growth) — data: 0% WR")
+                        continue
                 elif _trade_mode == "scalp" and not candidate.get("_scalp_mode"):
                     # Override to scalp mode
                     candidate["_scalp_mode"] = True
@@ -1343,6 +1401,7 @@ def run_cycle(bot_state: Dict) -> Dict:
                             "symbol":        symbol,
                             "issuer":        issuer,
                             "price":         price,
+                            "tvl_xrp":       candidate.get("tvl_xrp", tvl),
                             "liquidity_usd": candidate.get("liquidity_usd", 0),
                             "market_cap":    candidate.get("market_cap", 0),
                         },
@@ -1387,15 +1446,24 @@ def run_cycle(bot_state: Dict) -> Dict:
                     # With dust_min="1" IOC fills are now accepted at any price — slippage is checked here.
                     # Meme tokens on thin AMMs regularly show 5-10% fill slippage which still prints profit.
                     # Above 15% = over-chased, bad fill, cut immediately.
+                    # SKIP slippage check if expected_price was 0 (CLOB-only token, no AMM baseline) —
+                    # division by ~0 produces garbage slippage values in the billions of percent.
+                    _expected_for_slippage = exec_result.get("expected_price", 0)
+                    if _expected_for_slippage <= 0:
+                        actual_slippage = 0.0  # can't compute meaningful slippage — trust the fill
                     if actual_slippage > 0.15:
-                        logger.warning(f"🚫 {symbol}: entry slippage {actual_slippage:.1%} > 2.5% gate — attempting immediate sell to recover XRP")
+                        logger.warning(f"🚫 {symbol}: entry slippage {actual_slippage:.1%} > 15% gate — attempting immediate sell to recover XRP")
+                        _slippage_token = {
+                            "symbol": symbol, "issuer": issuer,
+                            "tvl_xrp": candidate.get("tvl_xrp", tvl),
+                        }
                         try:
                             sell_result = execution.sell_token(
                                 symbol         = symbol,
                                 issuer         = issuer,
                                 token_amount   = tokens_received,
                                 expected_price = actual_price,
-                                slippage_tolerance = brain.predict_slippage(token, final_size),
+                                slippage_tolerance = brain.predict_slippage(_slippage_token, final_size),
                             )
                             if sell_result.get("success"):
                                 logger.info(f"✅ Slippage recovery sell succeeded for {symbol}: {sell_result.get('xrp_received', 0):.4f} XRP recovered")
@@ -2036,7 +2104,35 @@ def startup(bot_state: Dict) -> Dict:
 
     # ── Wallet Cluster Monitor (Audit #2) ─────────────────────────────────────
     try:
-        cluster_mod.start_cluster_monitor(bot_state=bot_state)
+        def _on_cluster_alert(alert: dict):
+            """Realtime sniper callback — fires immediately on smart wallet cluster."""
+            try:
+                import realtime_sniper
+                import scanner as _sc
+                sym      = alert.get("symbol", "")
+                tok_key  = alert.get("token", "")
+                wallets  = alert.get("wallets", [])
+                if not sym or not tok_key or len(wallets) < 2:
+                    return
+                parts    = tok_key.split(":")
+                currency = parts[0] if len(parts) > 0 else ""
+                issuer   = parts[1] if len(parts) > 1 else ""
+                if not currency or not issuer:
+                    return
+                # Get current burst count for this token
+                import realtime_watcher as _rtw
+                burst = len(_rtw._trustset_times.get(tok_key, []))
+                # Get live price + TVL
+                price, tvl, _, _ = _sc.get_token_price_and_tvl(sym, issuer, currency=currency)
+                realtime_sniper.on_smart_cluster(
+                    symbol=sym, currency=currency, issuer=issuer,
+                    wallets=wallets, tvl_xrp=tvl, price=price or 0.0,
+                    burst_count=burst,
+                )
+            except Exception as _cbe:
+                logger.debug(f"Cluster alert callback error: {_cbe}")
+
+        cluster_mod.start_cluster_monitor(bot_state=bot_state, on_alert=_on_cluster_alert)
         logger.info("📡 Wallet cluster monitor started — watching for coordinated entries")
     except Exception as e:
         logger.warning(f"Cluster monitor startup error (non-fatal): {e}")

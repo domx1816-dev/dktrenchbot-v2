@@ -482,3 +482,118 @@ BOT STATUS AFTER FIX:
 GITHUB:
   - Commit: d2fe038 — "fix: tecKILLED bug + meme filter hardening"
   - All changes pushed to master branch
+
+═══════════════════════════════════════════════════════════════
+SESSION: 2026-04-09 ~03:30–04:54 UTC
+BALANCE: 163 XRP (was 199 XRP — active trading in progress)
+═══════════════════════════════════════════════════════════════
+
+BUGS FIXED THIS SESSION:
+
+1. brain.py — _get_safe_entry_size() unit mismatch
+   - liquidity_usd was used as XRP — was always 0 in main pipeline
+   - Result: every position sized at MIN_POSITION_XRP = 1 XRP
+   - Fix: now uses tvl_xrp directly. Fallback: liquidity_usd / xrp_price
+   - Slippage caps: 3.5% TVL<200, 4% TVL<1k, 5% TVL<5k, 6% TVL≥5k
+
+2. bot.py — tvl_xrp not passed to execute_trade token dict
+   - Fix: added tvl_xrp to token dict in exec_core path
+
+3. execution.py — xrp_received = min_xrp (undefined variable)
+   - Fix: changed to xrp_received = 0.000001
+
+4. Burst/CLOB candidates silently dropped (XTTM, ClawFarm missed)
+   - Root cause: candidate.get("tvl_xrp", 99999) — burst candidates
+     had "tvl" not "tvl_xrp" → always read as 99999 → stale zone skip
+   - Secondary: no price fetched → amm=None → silent continue
+   - Fix: burst injector now fetches live TVL+price via scanner,
+     stores as tvl_xrp, synthesizes AMM stub from real TVL
+
+5. BQ gate killed new launches (XTTM bq=19 killed)
+   - Fix: BQ < 40 gate bypassed for _burst_mode / _clob_launch candidates
+   - Burst count IS the signal — BQ is meaningless at launch
+
+6. Stale zone (>10K TVL) skip wrongly fired on burst candidates
+   - Fix: stale zone bypass for burst/CLOB signals
+
+7. Slippage recovery crash: "name 'token' is not defined"
+   - Fix: build _slippage_token dict inline from available scope vars
+
+8. Bogus slippage (billions %) on CLOB-only tokens
+   - Root cause: expected_price=0 on tokens with no AMM, division blows up
+   - Fix: skip slippage calculation when expected_price=0
+
+═══════════════════════════════════════════════════════════════
+MAJOR UPGRADE: REALTIME SNIPER (realtime_sniper.py)
+═══════════════════════════════════════════════════════════════
+
+Problem: Main cycle takes 3-7 min. Big moves (ClawFarm +584%) happen
+         and are detected in real-time but sit waiting for next cycle.
+
+Solution: realtime_sniper.py — executes immediately from realtime thread.
+          Bypass the cycle entirely for high-confidence signals.
+
+Signals that fire instantly (< 3 seconds from detection to trade):
+  - BURST_ELITE:    50+ TrustSets/5min → realtime_watcher fires
+  - CLOB_LAUNCH:    60+ TS + 25+ XRP CLOB vol → clob_tracker fires
+  - SMART_CLUSTER:  2+ tracked wallets entered → wallet_cluster callback
+  - BURST_COMBINED: 25+ TS AND 2+ smart wallets → max size
+
+Safety gates enforced on every realtime shot:
+  - Already in position → skip
+  - Rate limit: 5/hr max, 30s minimum gap
+  - Safety controller emergency stop → skip
+  - Wallet balance < 10 XRP → skip
+  - Full disagreement engine (rug, wash, trap, blacklist, regime)
+  - TVL < 100 XRP → skip (ghost pool)
+
+Wiring:
+  - realtime_watcher.py: burst==50 → realtime_sniper.on_burst_elite()
+  - clob_tracker.py: CLOB launch → realtime_sniper.on_clob_launch()
+  - bot.py: cluster monitor callback → realtime_sniper.on_smart_cluster()
+
+═══════════════════════════════════════════════════════════════
+MAJOR UPGRADE: BUY METHOD — Payment (tfPartialPayment)
+═══════════════════════════════════════════════════════════════
+
+Analysis of rEFDnEqu6pQGKUAa77wBLzGnXH8nk6WVkz (top XRPL meme bot):
+
+  BUY:  Payment (self-payment), tfPartialPayment (0x00020000)
+        SendMax = XRP to spend, Amount = huge token ceiling,
+        DeliverMin = expected_tokens × (1 - slippage_tolerance)
+        → Routes AMM + CLOB automatically, NEVER tecKILLED
+
+  SELL: OfferCreate, tfImmediateOrCancel + tfSell (0x000A0000)
+        TakerGets = tokens, TakerPays = minimum XRP
+
+Old method (OfferCreate IOC for buys):
+  - tecKILLED every time price moved >1% between score and submit
+  - No AMM routing — CLOB only
+  - All-or-nothing: reject if price moved at all
+
+New method (Payment tfPartialPayment):
+  - Partial fill ≥ DeliverMin → always succeeds
+  - XRPL auto-routes through AMM + CLOB for best price
+  - tecKILLED = eliminated
+  - DeliverMin provides slippage floor without causing failures
+
+Files changed:
+  - execution.py: buy_token() — complete rewrite to Payment method
+  - execution.py: sell_token() — added tfSell flag (0x000A0000)
+  - execution.py: _parse_actual_fill() — handles Payment DeliveredAmount
+
+SELL flags fixed:
+  - Was: 0x00020000 (tfImmediateOrCancel only)
+  - Now: 0x000A0000 (tfImmediateOrCancel + tfSell)
+    tfSell ensures XRPL consumes the offer at market price rather
+    than leaving it on book if partially filled
+
+═══════════════════════════════════════════════════════════════
+BOT STATUS AFTER SESSION:
+  - Balance: ~163 XRP (active positions being held)
+  - Positions on chain: PHX, PHASER, DROP, SCHWEPE, ARMY, 666, mXRP
+  - tecKILLED errors: ELIMINATED
+  - Realtime sniper: LIVE
+  - Burst/CLOB candidates: NOW REACH SCORING (were silently dropped)
+  - GitHub: needs push
+═══════════════════════════════════════════════════════════════

@@ -146,6 +146,16 @@ def on_offer_create(currency: str, issuer: str, symbol: str,
             "entry_trigger": True,
         })
 
+        # ── REALTIME SNIPER: fire immediately on CLOB launch ──────────────
+        try:
+            import realtime_sniper
+            realtime_sniper.on_clob_launch(
+                symbol=symbol, currency=currency, issuer=issuer,
+                ts_burst=ts_burst_count, vol_5min_xrp=vol_5min, price=price,
+            )
+        except Exception as _rse:
+            logger.debug(f"Realtime sniper CLOB error: {_rse}")
+
     # ── MOMENTUM SIGNAL ───────────────────────────────────────────────────
     # Pattern: price up 15%+ from first price in this window
     elif (key in _launch_fired or ts_burst_count >= 20) and first_p > 0 and latest_p > 0:

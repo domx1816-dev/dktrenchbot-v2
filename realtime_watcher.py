@@ -210,6 +210,20 @@ def _handle_trustset(tx: dict):
             # Also inject into registry if not there
             _add_to_registry(symbol, currency, issuer, 0, "realtime_trustset_burst")
 
+        # ── REALTIME SNIPER: fire immediately on elite burst (50+ TS/5min) ──
+        # Only fire at exact 50 threshold (not every 5 after) — one shot per token
+        if burst_count == 50:
+            try:
+                import realtime_sniper
+                import scanner as _sc
+                _price, _tvl, _, _ = _sc.get_token_price_and_tvl(symbol, issuer, currency=currency)
+                realtime_sniper.on_burst_elite(
+                    symbol=symbol, currency=currency, issuer=issuer,
+                    burst_count=burst_count, tvl_xrp=_tvl or 0.0, price=_price or 0.0,
+                )
+            except Exception as _rse:
+                logger.debug(f"Realtime sniper burst error: {_rse}")
+
 
 def _handle_offer_create(tx: dict):
     """

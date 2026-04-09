@@ -44,12 +44,12 @@ def _parse_actual_fill(metadata: Dict, wallet_addr: str, currency: str, issuer: 
     tokens_received = 0.0
 
     try:
-        # delivered_amount is the most reliable source
-        delivered = metadata.get("delivered_amount")
+        # delivered_amount / DeliveredAmount — most reliable source for Payment fills
+        delivered = metadata.get("delivered_amount") or metadata.get("DeliveredAmount")
         if isinstance(delivered, dict):
             if delivered.get("currency") == currency:
                 tokens_received = float(delivered.get("value", 0))
-        elif isinstance(delivered, str):
+        elif isinstance(delivered, str) and delivered != "unavailable":
             # XRP delivered (sell side)
             xrp_spent = int(delivered) / 1e6
 
@@ -143,12 +143,25 @@ def ensure_trustline(currency: str, issuer: str, symbol: str) -> bool:
 def buy_token(symbol: str, issuer: str, xrp_amount: float,
               expected_price: float, slippage_tolerance: float = 0.05) -> Dict:
     """
-    Buy tokens with XRP via OfferCreate + tfImmediateOrCancel.
-    This acts as a market order — fills immediately against AMM or CLOB, no resting order.
-    taker_pays = XRP (what we spend), taker_gets = token (what we receive)
+    Buy tokens via Payment (self-payment) + tfPartialPayment — same method used by
+    the best XRPL meme bots. This NEVER produces tecKILLED.
+
+    Transaction structure (matches rEFDnEqu6pQGKUAa77wBLzGnXH8nk6WVkz pattern):
+      TransactionType: Payment
+      Destination:     own wallet (self-payment)
+      SendMax:         XRP drops to spend (hard cap)
+      Amount:          huge token ceiling (e.g. max supply) — XRPL delivers what it can
+      DeliverMin:      minimum tokens acceptable = expected_tokens * (1 - slippage_tolerance)
+      Flags:           tfPartialPayment (0x00020000)
+
+    Why this beats OfferCreate:
+      - Routes through AMM + CLOB automatically (best price)
+      - Partial fills accepted if >= DeliverMin (no all-or-nothing failure)
+      - Never tecKILLED — price slippage is handled by DeliverMin, not rejection
+      - XRP spend capped by SendMax regardless of route
     """
     from xrpl.clients import WebsocketClient
-    from xrpl.models.transactions import OfferCreate
+    from xrpl.models.transactions import Payment
     from xrpl.models.amounts import IssuedCurrencyAmount
     from xrpl.transaction import submit_and_wait
     from xrpl.utils import xrp_to_drops
@@ -162,43 +175,66 @@ def buy_token(symbol: str, issuer: str, xrp_amount: float,
         return {"success": False, "error": f"trustline_setup_failed:{symbol}",
                 "action": "buy", "symbol": symbol, "xrp_requested": xrp_amount}
 
-    # Re-fetch live price before submitting — avoids tecKILLED from stale price
+    # Fetch live price to compute expected tokens and DeliverMin
+    live_price = expected_price
     try:
         import scanner as _sc
-        live_price, _, _, _ = _sc.get_token_price_and_tvl(symbol, issuer)
-        if live_price and live_price > 0:
-            expected_price = live_price
+        _lp, _, _, _ = _sc.get_token_price_and_tvl(symbol, issuer)
+        if _lp and _lp > 0:
+            live_price = _lp
     except Exception:
-        pass  # fall back to caller-provided price
+        pass
 
-    # CRITICAL FIX: Do NOT set a min_tokens floor on meme tokens.
-    # tecKILLED happens when price moves before TX lands and min can't be filled.
-    # Use taker_pays="1" (dust) so the IOC fills at whatever price is available.
-    # Post-trade slippage is checked from actual fill metadata instead.
-    # This is standard sniper behavior on volatile thin-pool meme tokens.
-    dust_min = "1"
+    # Expected tokens at current price
+    if live_price > 0:
+        expected_tokens = xrp_amount / live_price
+    else:
+        expected_tokens = 0.0
 
-    # OfferCreate IOC to BUY tokens with XRP:
-    # XRPL maker perspective: TakerPays = what taker pays maker = what WE RECEIVE
-    #                         TakerGets = what taker gets from maker = what WE GIVE
-    # To BUY tokens: TakerPays=tokens (we receive), TakerGets=XRP (we spend)
-    tx = OfferCreate(
-        account    = wallet.address,
-        taker_pays = IssuedCurrencyAmount(                  # tokens we receive
+    # DeliverMin = minimum tokens we'll accept (slippage floor)
+    # Use slippage_tolerance (default 5%) — set to 0 to accept any fill
+    if expected_tokens > 0 and live_price > 0:
+        deliver_min_tokens = expected_tokens * (1.0 - max(slippage_tolerance, 0.05))
+    else:
+        deliver_min_tokens = 0.0  # no floor if price unknown — accept anything
+
+    # Token ceiling: use a very large number so XRPL fills as much as possible
+    # (the SendMax XRP cap is the real limit, Amount is just the token ceiling)
+    token_ceiling = "999999999999"
+
+    send_max_drops = str(int(xrp_to_drops(xrp_amount)))
+
+    # Build Payment tx
+    tx_kwargs = {
+        "account":     wallet.address,
+        "destination": wallet.address,          # self-payment
+        "amount":      IssuedCurrencyAmount(    # token ceiling
             currency = currency,
             issuer   = issuer,
-            value    = dust_min,  # accept any fill — no minimum floor
+            value    = token_ceiling,
         ),
-        taker_gets = str(xrp_to_drops(xrp_amount)),        # XRP we spend
-        flags = 0x00020000,  # tfImmediateOrCancel
-    )
+        "send_max":    send_max_drops,          # XRP we spend (hard cap)
+        "flags":       0x00020000,              # tfPartialPayment
+    }
+
+    # Add DeliverMin if we have a meaningful price reference
+    if deliver_min_tokens > 0:
+        # Format to ≤15 significant digits (XRPL requirement)
+        dm_str = f"{deliver_min_tokens:.10g}"
+        tx_kwargs["deliver_min"] = IssuedCurrencyAmount(
+            currency = currency,
+            issuer   = issuer,
+            value    = dm_str,
+        )
+
+    tx = Payment(**tx_kwargs)
 
     result = _submit_with_retry(tx, wallet)
     latency = time.time() - start_ts
 
     xrp_spent       = xrp_amount
     tokens_received = 0.0
-    actual_price    = expected_price
+    actual_price    = live_price
 
     if result.get("success") and result.get("metadata"):
         xrp_spent, tokens_received = _parse_actual_fill(
@@ -207,18 +243,18 @@ def buy_token(symbol: str, issuer: str, xrp_amount: float,
         if tokens_received > 0 and xrp_spent > 0:
             actual_price = xrp_spent / tokens_received
 
-    slippage = abs(actual_price - expected_price) / expected_price if expected_price > 0 else 0
+    slippage = abs(actual_price - live_price) / live_price if live_price > 0 else 0
 
     entry = {
         "ts":              start_ts,
         "action":          "buy",
-        "route":           "offer_ioc",
+        "route":           "payment_partial",
         "symbol":          symbol,
         "issuer":          issuer,
         "xrp_requested":   xrp_amount,
         "xrp_spent":       round(xrp_spent, 6),
         "tokens_received": round(tokens_received, 8),
-        "expected_price":  round(expected_price, 8),
+        "expected_price":  round(live_price, 8),
         "actual_price":    round(actual_price, 8),
         "slippage":        round(slippage, 5),
         "latency_ms":      round(latency * 1000),
@@ -272,13 +308,13 @@ def sell_token(symbol: str, issuer: str, token_amount: float,
             issuer   = issuer,
             value    = f"{token_amount:.10g}",  # ≤15 sig digits
         ),
-        flags = 0x00020000,  # tfImmediateOrCancel
+        flags = 0x000A0000,  # tfImmediateOrCancel + tfSell (matches reference bot sell pattern)
     )
 
     result = _submit_with_retry(tx, wallet)
     latency = time.time() - start_ts
 
-    xrp_received = min_xrp
+    xrp_received = 0.000001  # 1 drop minimum — will be overwritten by actual fill
     tokens_sold  = token_amount
     actual_price = expected_price
 

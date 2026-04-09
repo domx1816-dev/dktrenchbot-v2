@@ -297,19 +297,52 @@ def position_sizer(
 def _get_safe_entry_size(token: dict) -> float:
     """
     Maximum safe position size (XRP) based on pool depth.
-    MC < $2k  → 1.5% of TVL
-    MC < $10k → 2.5% of TVL
-    MC > $10k → 3.0% of TVL
+
+    Uses tvl_xrp (always populated from AMM/CLOB) as the source of truth.
+    liquidity_usd is often 0 (only set from discovery.py external API path),
+    so we never rely on it here — that was causing 1 XRP sizing on large-MC tokens.
+
+    Slippage caps by TVL (XRP):
+      TVL < 200 XRP  → 3.5% of TVL (tiny pool, toe in)
+      TVL < 1k XRP   → 4.0% of TVL
+      TVL < 5k XRP   → 5.0% of TVL
+      TVL ≥ 5k XRP   → 6.0% of TVL (deep pool, can size up)
+
+    These percentages are aggressive enough to matter but won't move the
+    price more than ~1-2% on entry.
     """
-    liquidity = token.get("liquidity_usd", 0)
-    mcap      = token.get("market_cap", 0)
-    if mcap < 2000:
-        pct = 0.015
-    elif mcap < 10000:
-        pct = 0.025
+    tvl_xrp = float(token.get("tvl_xrp", 0) or 0)
+
+    # Fallback: if tvl_xrp missing, try to derive from liquidity_usd via XRP price
+    if tvl_xrp <= 0:
+        liquidity_usd = float(token.get("liquidity_usd", 0) or 0)
+        if liquidity_usd > 0:
+            try:
+                import json as _j
+                import os as _os
+                _briefing = _os.path.join(_os.path.dirname(__file__), "state", "market", "briefing.json")
+                with open(_briefing) as _f:
+                    _d = _j.load(_f)
+                _xrp_price = float(_d.get("prices", {}).get("xrp", {}).get("usd", 2.0) or 2.0)
+            except Exception:
+                _xrp_price = 2.0  # conservative fallback
+            tvl_xrp = liquidity_usd / _xrp_price
+
+    if tvl_xrp <= 0:
+        return MIN_POSITION_XRP
+
+    if tvl_xrp < 200:
+        pct = 0.035
+    elif tvl_xrp < 1000:
+        pct = 0.040
+    elif tvl_xrp < 5000:
+        pct = 0.050
     else:
-        pct = 0.030
-    return max(liquidity * pct, MIN_POSITION_XRP)
+        pct = 0.060
+
+    safe = tvl_xrp * pct
+    logger.debug(f"_get_safe_entry_size: tvl={tvl_xrp:.0f} XRP pct={pct:.1%} → safe={safe:.1f} XRP")
+    return max(safe, MIN_POSITION_XRP)
 
 
 # ═══════════════════════════════════════════════════════════════
