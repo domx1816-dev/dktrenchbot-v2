@@ -116,6 +116,7 @@ import wallet_hygiene
 import improve as improve_mod
 import report as report_mod
 import sniper as sniper_mod
+import brain
 
 # ── New Modules (Audit Improvements) ───────────────────────────────────────────
 import new_wallet_discovery as wallet_discovery_mod
@@ -1222,7 +1223,7 @@ def run_cycle(bot_state: Dict) -> Dict:
                 candidate["_trade_mode"] = _trade_mode
 
             except Exception as e:
-                logger.error(f"Scoring error {symbol}: {e}\n{traceback.format_exc()}")
+                logger.exception(f"Scoring error {symbol}: {e}")
                 continue
 
             # ── Momentum Confirmation Gate ────────────────────────────────────
@@ -1957,7 +1958,7 @@ def run_cycle(bot_state: Dict) -> Dict:
 
 
         except Exception as e:
-            logger.error(f"Exit check error {symbol}: {e}\n{traceback.format_exc()}")
+            logger.exception(f"Exit check error {symbol}: {e}")
 
     return bot_state
 
@@ -2096,7 +2097,7 @@ def main():
             _write_status(_cycle_count, len(_bot_state.get("positions", {})))
 
         except Exception as e:
-            logger.error(f"Cycle error: {e}\n{traceback.format_exc()}")
+            logger.exception(f"Cycle error: {e}")
             _write_status(_cycle_count, 0, str(e))
 
         # Sleep until next cycle
