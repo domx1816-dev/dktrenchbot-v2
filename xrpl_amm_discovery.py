@@ -102,20 +102,86 @@ def to_hex(symbol: str) -> str:
 
 
 def get_amm_tvl(currency: str, issuer: str) -> Optional[float]:
-    """Check AMM exists and return XRP-side TVL. None = no AMM."""
+    """
+    Check AMM exists and return XRP-side TVL. None = no AMM.
+    
+    Fallback chain for CLIO amm_info bugs:
+    1. Try amm_info RPC (XRP/token direction)
+    2. Try amm_info RPC (token/XRP direction)
+    3. Check if issuer account has AMMID field
+    4. Scan trustline holders for accounts with AMMID holding this token
+    """
+    # Method 1: amm_info RPC (XRP/token)
     result = _rpc("amm_info", {
         "asset":  {"currency": "XRP"},
         "asset2": {"currency": currency, "issuer": issuer},
     })
-    if not result:
-        return None
-    amm = result.get("amm", {})
-    if not amm or not amm.get("amount"):
-        return None
+    if result and result.get("status") == "success":
+        amm = result.get("amm", {})
+        if amm and amm.get("amount"):
+            try:
+                return int(amm["amount"]) / 1e6
+            except:
+                pass
+    
+    # Method 2: amm_info RPC (token/XRP reverse)
+    result2 = _rpc("amm_info", {
+        "asset":  {"currency": currency, "issuer": issuer},
+        "asset2": {"currency": "XRP"},
+    })
+    if result2 and result2.get("status") == "success":
+        amm = result2.get("amm", {})
+        if amm and amm.get("amount"):
+            try:
+                return int(amm["amount"]) / 1e6
+            except:
+                pass
+    
+    # Method 3: Check if issuer itself is the AMM (has AMMID)
     try:
-        return int(amm["amount"]) / 1e6
-    except:
-        return None
+        info_resp = _rpc("account_info", {"account": issuer})
+        if info_resp and isinstance(info_resp, dict):
+            account_data = info_resp.get("account_data", {})
+            amm_id = account_data.get("AMMID")
+            if amm_id:
+                # Issuer IS the AMM — get balances directly
+                xrp_drops = int(account_data.get("Balance", 0))
+                # Get token balance from issuer's trustlines
+                lines_resp = _rpc("account_lines", {"account": issuer})
+                if lines_resp and isinstance(lines_resp, dict):
+                    for line in lines_resp.get("lines", []):
+                        if line.get("currency") == currency:
+                            token_bal = abs(float(line.get("balance", 0)))
+                            if token_bal > 0 and xrp_drops > 0:
+                                return xrp_drops / 1e6
+    except Exception:
+        pass
+    
+    # Method 4: Scan trustline holders for AMM accounts
+    # This catches cases where the AMM is a separate account (like XYZ)
+    # Note: currency might be hex-encoded OR plain 3-char — try both
+    try:
+        lines_resp = _rpc("account_lines", {"account": issuer, "limit": 200})
+        if lines_resp and isinstance(lines_resp, dict):
+            for line in lines_resp.get("lines", []):
+                holder = line.get("account", "")
+                bal = float(line.get("balance", 0))
+                line_currency = line.get("currency", "")
+                # Match either exact currency or hex-encoded version
+                if holder and abs(bal) > 0 and (line_currency == currency or line_currency == hex_to_name(currency)):
+                    # Check if this holder is an AMM
+                    holder_info = _rpc("account_info", {"account": holder})
+                    if holder_info and isinstance(holder_info, dict):
+                        holder_data = holder_info.get("account_data", {})
+                        if holder_data.get("AMMID"):
+                            # Found the AMM account! Get its XRP balance
+                            xrp_drops = int(holder_data.get("Balance", 0))
+                            if xrp_drops > 0:
+                                return xrp_drops / 1e6
+    except Exception:
+        pass
+    
+    return None
 
 
 def fetch_xrpl_to_tokens(limit: int = 500) -> List[Dict]:

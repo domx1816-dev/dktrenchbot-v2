@@ -21,6 +21,18 @@ SCAN_RESULTS_FILE  = os.path.join(STATE_DIR, "scan_results.json")
 ACTIVE_REGISTRY_FILE = os.path.join(STATE_DIR, "active_registry.json")
 
 
+def hex_to_name(h: str) -> str:
+    """Convert XRPL hex currency code to readable name."""
+    if not h or len(h) <= 3:
+        return h or ""
+    try:
+        decoded = bytes.fromhex(h).decode('ascii', errors='replace')
+        # Strip null bytes and trailing whitespace
+        return decoded.rstrip('\x00').strip()
+    except Exception:
+        return h
+
+
 def _load_active_registry():
     """
     Load the dynamic registry from discovery.py if available.
@@ -99,7 +111,9 @@ def get_amm_info(symbol: str, issuer: str, currency: str = None) -> Optional[Dic
                 token_bal = 0
                 if lines_resp and isinstance(lines_resp, dict):
                     for line in lines_resp.get("lines", []):
-                        if line.get("currency") == currency:
+                        line_currency = line.get("currency", "")
+                        # Match either exact currency or decoded name
+                        if line_currency == currency or line_currency == hex_to_name(currency):
                             # For AMM-as-issuer, the token balance is what the AMM holds
                             token_bal = abs(float(line.get("balance", 0)))
                             break
