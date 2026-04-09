@@ -416,3 +416,38 @@ def api_realtime():
     except Exception:
         pass
     return {"signals": signals[-20:]}
+
+
+@app.get("/api/ecosystem")
+def api_ecosystem():
+    """Machine-readable project map for agent discovery."""
+    return {
+        "name": "DKTrenchBot v2",
+        "version": "2.0",
+        "description": "Autonomous XRPL memecoin trading agent",
+        "type": "trading_bot",
+        "networks": {
+            "xrpl_mainnet": {
+                "chainId": 0,
+                "rpc": "https://rpc.xrplclaw.com",
+                "explorer": "https://xrpscan.com"
+            }
+        },
+        "bot_wallet": "rKQACag8Td9TrMxBwYJPGRMDV8cxGfKsmF",
+        "api": {
+            "rest": "https://mom-viii-sunshine-requiring.trycloudflare.com/api",
+            "endpoints": ["/status", "/trades", "/candidates", "/safety", "/realtime", "/health"]
+        },
+        "docs": {
+            "llms_txt": "https://github.com/domx1816-dev/dktrenchbot-v2/blob/master/llms.txt",
+            "skill_md": "https://github.com/domx1816-dev/dktrenchbot-v2/blob/master/SKILL.md",
+            "master_build": "https://github.com/domx1816-dev/dktrenchbot-v2/blob/master/MASTER_BUILD.md"
+        },
+        "github": "https://github.com/domx1816-dev/dktrenchbot-v2",
+        "strategy": {
+            "win_rate_target": 0.485,
+            "backtest_pnl_xrp": 2892,
+            "backtest_trades": 1008,
+            "profit_factor": 6.39
+        }
+    }
