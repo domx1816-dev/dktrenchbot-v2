@@ -656,3 +656,124 @@ BOT STATUS AFTER SESSION:
   - MEV protection: LIVE
   - Wallet tracking: INTACT (data value preserved)
 ═══════════════════════════════════════════════════════════════
+
+═══════════════════════════════════════════════════════════════
+SESSION: Apr 9 2026 (06:37–06:43 UTC) — Transaction Failure Fixes
+═══════════════════════════════════════════════════════════════
+
+PROBLEM: Transactions failing with tecPATH_DRY and tecPATH_PARTIAL
+even on tokens with reported TVL > 100 XRP.
+
+ROOT CAUSE ANALYSIS:
+  The realtime sniper receives TVL and price as parameters from callers
+  (realtime_watcher, clob_tracker). These values can be stale — the
+  scanner cache may report an AMM that no longer exists or has been
+  drained. When buy_token() constructs a Payment transaction, it tries
+  to refetch live price but gets None/0 for dead pools. XRPL's pathfinding
+  engine then returns tecPATH_DRY because there is literally no route
+  through the ledger graph to that token.
+
+  Key finding: scanner.get_token_price_and_tvl() returned source="clob"
+  and amm_id=None for PHASER, meaning no active AMM exists. But the
+  sniper had fired anyway with stale tvl=3497 XRP from cache.
+
+FIXES APPLIED:
+
+1. brain.py line 85 — NameError fix
+   - Changed _update_execution_stats(trade) → update_execution_stats(trade)
+   - Function was defined without underscore prefix but called with it
+   - Impact: exit checks were crashing silently, leaving positions stuck
+
+2. realtime_sniper.py — Gate 7: AMM existence verification
+   - Before firing, sniper now calls get_token_price_and_tvl() fresh
+   - Requires source == "amm" AND amm_id present (CLOB-only tokens rejected)
+   - Verifies AMM account exists on-chain via AccountInfo RPC
+   - If AMM doesn't exist → skip before wasting gas on doomed tx
+   - This eliminates tecPATH_DRY from non-existent/dead pools
+
+TECHNICAL NOTE:
+  tecPATH_DRY on a Payment transaction means XRPL's pathfinding cannot
+  find ANY route from XRP to the target token. On XRPL, this only happens
+  when the AMM pool doesn't exist or has been removed — not from low
+  liquidity. A valid AMM always provides a path.
+
+BOT STATUS AFTER SESSION:
+  - brain.py NameError: FIXED
+  - tecPATH_DRY prevention: Gate 7 active in realtime_sniper.py
+  - All other systems operational
+═══════════════════════════════════════════════════════════════
+
+═══════════════════════════════════════════════════════════════
+SESSION: Apr 9 2026 (07:15 UTC) — Hex Symbol Decode Bug Fix
+═══════════════════════════════════════════════════════════════
+
+PROBLEM: Dashboard showed zero open positions, but on-chain balances confirmed
+real holdings in TOTO, ARMY, Horizon, and BullXRP. Bot's state tracking was
+completely disconnected from reality.
+
+ROOT CAUSE ANALYSIS:
+  The realtime sniper was receiving raw hex currency codes instead of decoded
+  symbols. Chain of failure:
+
+  1. wallet_cluster detects smart wallet buys, extracts symbol from token_key
+     ("currency:issuer") where currency is hex (e.g., "544F544F...")
+  2. wallet_cluster passes hex directly to cluster alert callback
+  3. _on_cluster_alert() calls realtime_sniper.on_smart_cluster(symbol=sym, ...)
+     with hex symbol
+  4. Sniper's fire() writes position dict with hex symbol and NO strategy field
+  5. Position key also uses hex: key = f"{currency}:{issuer}"
+  6. Reconcile couldn't properly match hex-keyed positions to chain balances
+  7. Dashboard reads active_registry.json (discovery data) not state.json
+     (actual positions), showing zero positions
+
+  Affected positions at time of discovery:
+  - TOTO: 71,220 tokens @ 0.00021061 XRP (smart_cluster, 05:18 UTC)
+  - Horizon: 10.04 tokens @ 1.4943 XRP (smart_cluster, 05:44 UTC)
+  - ARMY: 3,606 tokens @ 0.00416 XRP (smart_cluster, 05:53 UTC)
+  - BullXRP: 2,674,382 tokens @ 0.00000462 XRP (smart_cluster, 05:58 UTC)
+  - RPR: dust position
+
+FIXES APPLIED:
+
+1. realtime_sniper.py — Hex decode at entry point
+   Added _decode_hex_symbol() function that converts 40-char hex currency
+   codes to ASCII symbols. Called at top of fire() before ANY processing:
+
+   def _decode_hex_symbol(s: str) -> str:
+       if isinstance(s, str) and len(s) == 40 and all(c in "0123456789ABCDEFabcdef" for c in s):
+           try:
+               decoded = bytes.fromhex(s).rstrip(b"\x00").decode("utf-8", errors="replace")
+               if decoded and decoded.isprintable():
+                   return decoded
+           except Exception:
+               pass
+       return s
+
+   This catches ALL sniper entry paths (burst_elite, smart_cluster, clob_launch)
+   regardless of which caller passed hex.
+
+2. realtime_sniper.py — Strategy metadata
+   Added "strategy": signal_type to position dict so every position tracks
+   what triggered it (smart_cluster, burst_elite, clob_launch, etc.).
+   Also populated smart_wallets field from caller parameter.
+
+3. state.json — Existing position repair
+   Ran repair script to decode hex symbols in existing positions and add
+   strategy metadata based on log analysis.
+
+POST-FIX STATE:
+  - 2 active positions: TOTO (71,220) and ARMY (3,606) with correct symbols
+  - Horizon and BullXRP had zero on-chain balance (already sold/closed)
+    — reconcile detected discrepancy, removed from local state, attempted
+    orphan sell (returned 0 XRP as expected since already gone)
+  - Bot restarted at 07:15 UTC with fixes active
+  - Future sniper entries will have proper decoded symbols and strategy tracking
+
+LESSONS:
+  - Single decode point: Always decode hex at the lowest common entry point
+    (sniper's fire()) rather than fixing each caller individually
+  - Strategy tracking: Every position must record what triggered it for
+    post-trade analysis and performance attribution
+  - State consistency: Reconcile is critical for catching drift between
+    on-chain reality and local state — never skip or disable it
+═══════════════════════════════════════════════════════════════

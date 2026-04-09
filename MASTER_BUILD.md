@@ -181,3 +181,100 @@ GitHub:             https://github.com/domx1816-dev/dktrenchbot-v2
 - 126 XRP spent across 21 smart_cluster sniper fires
 - 0 confirmed wins — spray-and-pray MEV bots mimicking smart money
 - RPR manually cut, STEVE reconcile-sold
+
+---
+
+## Apr 9 2026 (06:37 UTC) — Transaction Failure Fixes
+
+### brain.py — NameError Fix
+- Line 85: `_update_execution_stats(trade)` → `update_execution_stats(trade)`
+- Function defined without underscore prefix but called with it
+- Exit checks were crashing silently, leaving positions unsold
+
+### realtime_sniper.py — Gate 7: AMM Existence Verification
+- Before firing, sniper calls `get_token_price_and_tvl()` fresh
+- Requires `source == "amm"` AND `amm_id` present
+- CLOB-only tokens are rejected (Payment tx requires AMM pool)
+- Verifies AMM account exists on-chain via `AccountInfo` RPC
+- Eliminates `tecPATH_DRY` from non-existent or removed pools
+
+### Root Cause
+- Sniper received stale TVL from caller parameters
+- Scanner cache reported AMMs that no longer existed
+- Payment transaction pathfinding failed because no AMM route existed
+- XRPL returns `tecPATH_DRY` only when there is literally no ledger path
+
+---
+
+## Apr 9 2026 (07:15 UTC) — Hex Symbol Decode Bug Fix
+
+### The Bug: Positions Showing Hex Instead of Symbols
+**Symptom:** Dashboard and state showed zero open positions, but on-chain balances confirmed real holdings in TOTO, ARMY, Horizon, BullXRP.
+
+**Root Cause Chain:**
+1. `wallet_cluster` detects smart wallet buys and extracts symbol from token_key (`"currency:issuer"`)
+2. Currency code is raw hex (e.g., `544F544F...`), so `symbol = parts[0]` gets hex instead of decoded "TOTO"
+3. This hex symbol passed through cluster alert → `_on_cluster_alert()` → `realtime_sniper.on_smart_cluster(symbol=sym, ...)`
+4. Sniper's `fire()` function wrote position dict with hex symbol and **no strategy field**
+5. Position key also used hex: `key = f"{currency}:{issuer}"` where currency was already hex
+6. Reconcile couldn't match hex-keyed positions to chain balances properly
+7. Dashboard read `active_registry.json` (discovery data) not `state.json` (actual positions)
+
+**Affected Positions:**
+- TOTO: 71,220 tokens @ 0.00021061 XRP (smart_cluster signal, 05:18 UTC)
+- Horizon: 10.04 tokens @ 1.4943 XRP (smart_cluster signal, 05:44 UTC)  
+- ARMY: 3,606 tokens @ 0.00416 XRP (smart_cluster signal, 05:53 UTC)
+- BullXRP: 2,674,382 tokens @ 0.00000462 XRP (smart_cluster signal, 05:58 UTC)
+- RPR: dust position
+
+### Fixes Applied
+
+#### 1. realtime_sniper.py — Hex Decode at Entry Point
+Added `_decode_hex_symbol()` function that converts 40-char hex currency codes to ASCII symbols:
+```python
+def _decode_hex_symbol(s: str) -> str:
+    """Decode 40-char hex currency code to ASCII symbol. Returns original if not hex."""
+    if isinstance(s, str) and len(s) == 40 and all(c in "0123456789ABCDEFabcdef" for c in s):
+        try:
+            decoded = bytes.fromhex(s).rstrip(b"\x00").decode("utf-8", errors="replace")
+            if decoded and decoded.isprintable():
+                return decoded
+        except Exception:
+            pass
+    return s
+```
+
+Called at top of `fire()` before ANY processing:
+```python
+symbol = _decode_hex_symbol(symbol)
+```
+
+This catches all sniper entry paths (burst_elite, smart_cluster, clob_launch) regardless of caller.
+
+#### 2. realtime_sniper.py — Strategy Metadata
+Added `strategy` field to position dict to track signal type:
+```python
+"strategy": signal_type,  # smart_cluster, burst_elite, clob_launch, etc.
+```
+
+Also populated `smart_wallets` field from caller parameter instead of empty list.
+
+#### 3. state.json — Existing Position Repair
+Ran repair script to decode hex symbols in existing positions:
+- `544F544F...` → `TOTO`
+- `486F72697A6F6E...` → `Horizon`
+- `41524D59...` → `ARMY`
+- `42756C6C585250...` → `BullXRP`
+
+Added strategy metadata based on log analysis (all were `smart_cluster` signals).
+
+### Post-Fix State
+- **2 active positions:** TOTO (71,220) and ARMY (3,606) with correct symbols and strategy tracking
+- Horizon and BullXRP had zero on-chain balance (already sold/closed) — reconcile detected discrepancy, removed from local state, attempted orphan sell (returned 0 XRP as expected)
+- Bot restarted at 07:15 UTC with fixes active
+- Future sniper entries will have proper decoded symbols and strategy metadata
+
+### Lessons
+- **Single decode point:** Always decode hex at the lowest common entry point (sniper's `fire()`) rather than fixing each caller
+- **Strategy tracking:** Every position must record what triggered it for post-trade analysis
+- **State consistency:** Reconcile is critical for catching drift between on-chain reality and local state

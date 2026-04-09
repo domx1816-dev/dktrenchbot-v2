@@ -222,10 +222,11 @@ def _open_position_in_state(symbol: str, issuer: str, currency: str,
             "chart_state":  "realtime_sniper",
             "score_band":   "A",
             "entry_hash":   entry_result.get("hash"),
-            "smart_wallets": [],
+            "smart_wallets": smart_wallets or [],
             "scalp_mode":   False,
             "trade_mode":   "hold",
             "is_proven":    False,
+            "strategy":     signal_type,  # CRITICAL: track what triggered this entry
             "_godmode_type": signal_type,
             "_godmode_tp":   None,
             "_godmode_hardstop": None,
@@ -241,6 +242,18 @@ def _open_position_in_state(symbol: str, issuer: str, currency: str,
         logger.error(f"Failed to write position to state: {e}")
 
 
+def _decode_hex_symbol(s: str) -> str:
+    """Decode 40-char hex currency code to ASCII symbol. Returns original if not hex."""
+    if isinstance(s, str) and len(s) == 40 and all(c in "0123456789ABCDEFabcdef" for c in s):
+        try:
+            decoded = bytes.fromhex(s).rstrip(b"\x00").decode("utf-8", errors="replace")
+            if decoded and decoded.isprintable():
+                return decoded
+        except Exception:
+            pass
+    return s
+
+
 def fire(symbol: str, currency: str, issuer: str,
          signal_type: str, tvl_xrp: float, price: float,
          burst_count: int = 0, smart_wallets: list = None,
@@ -250,6 +263,10 @@ def fire(symbol: str, currency: str, issuer: str,
 
     signal_type: one of burst_elite | smart_cluster | clob_launch | burst_combined
     """
+    # CRITICAL FIX: Decode hex symbols before ANY processing
+    # Callers (wallet_cluster, realtime_watcher) may pass raw hex currency codes
+    symbol = _decode_hex_symbol(symbol)
+    
     key = f"{currency}:{issuer}"
 
     # ── Gate 1: already in this position ─────────────────────────────────
@@ -292,6 +309,25 @@ def fire(symbol: str, currency: str, issuer: str,
     if tvl_xrp > 0 and tvl_xrp < 100:
         logger.info(f"RT sniper: {symbol} TVL={tvl_xrp:.0f} XRP too thin — skip")
         return False
+
+    # ── Gate 7: verify AMM exists and has liquidity (prevent tecPATH_DRY) ─
+    try:
+        import scanner as _sc
+        _p, _t, _src, _amm_id = _sc.get_token_price_and_tvl(symbol, issuer)
+        # Must have a valid AMM source — CLOB-only tokens will fail Payment tx
+        if _src != "amm" or not _amm_id:
+            logger.info(f"🚫 RT sniper: {symbol} no active AMM found (source={_src}) — skip")
+            return False
+        # Verify AMM account actually exists on-chain
+        from xrpl.clients import JsonRpcClient
+        from xrpl.models import AccountInfo as _AI
+        _cli = JsonRpcClient("https://rpc.xrplclaw.com")
+        _ai_resp = _cli.request(_AI(account=_amm_id))
+        if not _ai_resp.result.get("account_data"):
+            logger.info(f"🚫 RT sniper: {symbol} AMM account {_amm_id[:8]}... does not exist — skip")
+            return False
+    except Exception:
+        pass  # If we can't verify, proceed anyway (don't block on RPC errors)
 
     # ── All gates passed — FIRE ───────────────────────────────────────────
     size = _get_size(signal_type, tvl_xrp, wallet_balance)

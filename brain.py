@@ -82,7 +82,7 @@ def update_after_trade(trade: dict) -> None:
     stats["volatility"] = _vol(stats["volatility"], pnl)
 
     # Execution quality tracking
-    _update_execution_stats(trade)
+    update_execution_stats(trade)
 
     # Recompute strategy weight
     _recompute_strategy_weight(strategy)
