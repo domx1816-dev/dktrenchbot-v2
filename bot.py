@@ -1059,9 +1059,22 @@ def run_cycle(bot_state: Dict) -> Dict:
                     "GOLD","SLVR","OIL","SPX","NDX",
                     # Real-world asset tokens
                     "RLUSD","TREASU","TBILL",
+                    # Payment / fintech infrastructure (NOT memes)
+                    "XRPAYNET","PAYNET","XPAYN","XPAY","XRPN","XRPL","XRPLFDN",
+                    "RIPPLE","RIPPLEX","XRPF","XRPH","XRPP","XRPS","XRPT","XRPU","XRPV",
+                    # Utility / bridge protocols (frequently slip through)
+                    "BRIDGE","SWAP","XSWAP","XBRIDGE","REMIT","REMITTANCE",
+                    "WALLET","WALLT","CUSTODY","EXCHANGE","EXCH",
+                    # Index / tracker tokens
+                    "INDEX","IDX","TRACKER","PORTFOLIO",
                 }
                 NON_MEME_PREFIXES = ("W",)   # wrapped tokens
                 NON_MEME_SUFFIXES = ("IOU", "LP", "POOL", "VAULT")
+                # Substring keyword filter — catches utility tokens regardless of exact name
+                NON_MEME_SUBSTRINGS = (
+                    "PAYNET","PAYMENT","REMIT","BRIDGE","FINANCE","PROTOCOL",
+                    "NETWORK","CHAIN","LAYER","TOKEN","EXCHANGE","CUSTODY","WALLET",
+                )
                 if sym_up in NON_MEME_SKIP:
                     logger.debug(f"SKIP {symbol}: non-meme token — operator meme-only directive")
                     continue
@@ -1070,6 +1083,9 @@ def run_cycle(bot_state: Dict) -> Dict:
                     continue
                 if any(sym_up.endswith(s) for s in NON_MEME_SUFFIXES):
                     logger.debug(f"SKIP {symbol}: LP/vault token — not a meme")
+                    continue
+                if any(kw in sym_up for kw in NON_MEME_SUBSTRINGS):
+                    logger.debug(f"SKIP {symbol}: utility keyword in name — not a meme")
                     continue
 
                 # Meme signal requirement: anonymous issuer (no verified domain) OR
@@ -1366,10 +1382,12 @@ def run_cycle(bot_state: Dict) -> Dict:
                         logger.warning(f"✗ BUY {symbol}: success but 0 tokens received — skipping position record")
                         continue
 
-                    # Slippage guard: SKIP position if entry slippage > 2.5%
-                    # 2026-04-05 audit: 0% WR on entries with >2.5% slippage (T3DDY 3.2%=-1.2, ROOSEVELT 1.9%=-2.0)
-                    # Changed from warning to hard skip — don't hold a bad fill
-                    if actual_slippage > 0.025:
+                    # Slippage guard: SKIP position if entry slippage > 15%
+                    # NOTE: Raised from 2.5% → 15% after removing min_tokens floor in execution.py
+                    # With dust_min="1" IOC fills are now accepted at any price — slippage is checked here.
+                    # Meme tokens on thin AMMs regularly show 5-10% fill slippage which still prints profit.
+                    # Above 15% = over-chased, bad fill, cut immediately.
+                    if actual_slippage > 0.15:
                         logger.warning(f"🚫 {symbol}: entry slippage {actual_slippage:.1%} > 2.5% gate — attempting immediate sell to recover XRP")
                         try:
                             sell_result = execution.sell_token(

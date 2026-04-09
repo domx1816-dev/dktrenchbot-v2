@@ -171,8 +171,12 @@ def buy_token(symbol: str, issuer: str, xrp_amount: float,
     except Exception:
         pass  # fall back to caller-provided price
 
-    # Min tokens with slippage buffer (20% to handle AMM movement on thin pools)
-    min_tokens = (xrp_amount / expected_price) * (1 - max(slippage_tolerance, 0.10))
+    # CRITICAL FIX: Do NOT set a min_tokens floor on meme tokens.
+    # tecKILLED happens when price moves before TX lands and min can't be filled.
+    # Use taker_pays="1" (dust) so the IOC fills at whatever price is available.
+    # Post-trade slippage is checked from actual fill metadata instead.
+    # This is standard sniper behavior on volatile thin-pool meme tokens.
+    dust_min = "1"
 
     # OfferCreate IOC to BUY tokens with XRP:
     # XRPL maker perspective: TakerPays = what taker pays maker = what WE RECEIVE
@@ -183,7 +187,7 @@ def buy_token(symbol: str, issuer: str, xrp_amount: float,
         taker_pays = IssuedCurrencyAmount(                  # tokens we receive
             currency = currency,
             issuer   = issuer,
-            value    = f"{min_tokens:.10g}",  # ≤15 sig digits
+            value    = dust_min,  # accept any fill — no minimum floor
         ),
         taker_gets = str(xrp_to_drops(xrp_amount)),        # XRP we spend
         flags = 0x00020000,  # tfImmediateOrCancel
@@ -252,15 +256,17 @@ def sell_token(symbol: str, issuer: str, token_amount: float,
     except Exception:
         pass
 
-    # Min XRP with slippage buffer (20% to handle AMM movement)
-    min_xrp = token_amount * expected_price * (1 - max(slippage_tolerance, 0.10))
+    # CRITICAL FIX: Do NOT set a min_xrp floor on SELL either.
+    # tecKILLED fires when price drops even 1% after tx submitted.
+    # Accept 1 drop minimum — let the fill happen at market, check slippage post-trade.
+    min_xrp_drops = "1"  # dust minimum, never causes tecKILLED
 
     # OfferCreate IOC to SELL tokens for XRP:
     # XRPL maker perspective: TakerPays = what WE RECEIVE, TakerGets = what WE GIVE
     # To SELL tokens: TakerPays=XRP (we receive), TakerGets=tokens (we give)
     tx = OfferCreate(
         account    = wallet.address,
-        taker_pays = str(xrp_to_drops(min_xrp)),           # XRP we receive
+        taker_pays = min_xrp_drops,                        # XRP we receive (1 drop = accept any)
         taker_gets = IssuedCurrencyAmount(                  # tokens we give
             currency = currency,
             issuer   = issuer,
