@@ -3,144 +3,826 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>DKTrenchBot Command Center</title>
+<title>DKTrenchBot Terminal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
-:root{--bg:#080e1a;--panel:#0d1526;--border:#1e2d4a;--text:#e8eeff;--muted:#6b7fa3;--good:#00d4aa;--warn:#f5a623;--bad:#ff4d6d;--accent:#3d9bff;--purple:#7b5ea7}
+:root{
+  --bg:#080e1a;--panel:#0d1526;--panel2:#111e35;--border:#1e2d4a;
+  --text:#e8eeff;--muted:#6b7fa3;--good:#00d4aa;--warn:#f5a623;
+  --bad:#ff4d6d;--accent:#3d9bff;--accent2:#7b5ea7;
+}
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:13px;line-height:1.5}
-.wrap{max-width:1400px;margin:0 auto;padding:16px 20px}
-h1{font-size:18px;font-weight:700;margin-bottom:12px;color:var(--accent)}
-h2{font-size:14px;font-weight:600;margin-bottom:8px;color:var(--text)}
-.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px}
-.stat-card{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:12px 14px}
-.stat-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
-.stat-value{font-size:20px;font-weight:700;margin-top:2px}
-.stat-value.good{color:var(--good)}.stat-value.bad{color:var(--bad)}
-.section{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:14px}
-.log-window{height:250px;overflow-y:auto;font-family:'JetBrains Mono',monospace;font-size:11px;line-height:1.5;background:#060b14;border-radius:6px;padding:8px}
-.log-entry{padding:1px 0;border-bottom:1px solid #0d1526}.log-entry.warn{color:var(--warn)}.log-entry.error{color:var(--bad)}.log-entry.info{color:var(--good)}
-.pos-row,.trade-row,.shadow-row{display:flex;justify-content:space-between;padding:5px 8px;border-bottom:1px solid var(--border);font-size:12px}
-.pos-row:last-child,.trade-row:last-child,.shadow-row:last-child{border:none}
-.controls{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
-.btn{padding:7px 14px;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;color:#fff}
-.btn-start{background:var(--good)}.btn-stop{background:var(--warn)}.btn-kill{background:var(--bad)}.btn-reset{background:var(--accent)}
-.btn:hover{opacity:.85}
-.status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
-.status-dot.on{background:var(--good);box-shadow:0 0 6px var(--good)}.status-dot.off{background:var(--bad)}
-.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-@media(max-width:900px){.grid-2{grid-template-columns:1fr}}
-.ml-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}
-.ml-logging{background:#1a2744;color:var(--accent)}.ml-active{background:#1a3a2a;color:var(--good)}
-.tab-bar{display:flex;gap:4px;margin-bottom:10px}
-.tab{padding:6px 14px;border:1px solid var(--border);border-radius:6px 6px 0 0;background:var(--panel);cursor:pointer;font-size:12px;color:var(--muted)}
-.tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
-.tab-content{display:none}.tab-content.active{display:block}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:13px;line-height:1.5}
+a{color:var(--accent);text-decoration:none}
+.wrap{max-width:1480px;margin:0 auto;padding:16px 20px}
+
+/* TOP BAR */
+.topbar{display:flex;align-items:center;gap:16px;padding:12px 20px;background:var(--panel);border-bottom:1px solid var(--border);flex-wrap:wrap;position:sticky;top:0;z-index:100}
+.topbar-title{font-size:15px;font-weight:700;letter-spacing:-.01em;color:var(--text)}
+.topbar-title span{color:var(--accent)}
+.topbar-pills{display:flex;gap:8px;flex-wrap:wrap;align-items:center;flex:1}
+.pill{background:var(--panel2);border:1px solid var(--border);padding:5px 12px;border-radius:999px;font-size:12px;display:flex;align-items:center;gap:6px;cursor:pointer}
+.pill:hover{border-color:var(--accent)}
+.dot{width:7px;height:7px;border-radius:50%;display:inline-block;flex-shrink:0}
+.dot.good{background:var(--good);box-shadow:0 0 6px var(--good)}
+.dot.warn{background:var(--warn)}
+.dot.bad{background:var(--bad)}
+.dot.pulse{animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.6;transform:scale(1.3)}}
+#timer{font-weight:700;color:var(--accent)}
+#timer.urgent{color:var(--warn);animation:blink .5s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.4}}
+
+/* TABS */
+.tabs{display:flex;gap:0;border-bottom:1px solid var(--border);margin:20px 0 0 0;background:var(--panel)}
+.tab{padding:12px 20px;cursor:pointer;font-size:13px;font-weight:500;color:var(--muted);border-bottom:2px solid transparent;transition:all .15s;white-space:nowrap}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.tab-content{display:none;padding:20px 0}
+.tab-content.active{display:block}
+
+/* CARDS */
+.cards{display:grid;gap:12px;margin-bottom:16px}
+.cards-4{grid-template-columns:repeat(4,1fr)}
+.cards-3{grid-template-columns:repeat(3,1fr)}
+.cards-6{grid-template-columns:repeat(6,1fr)}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px 18px}
+.card-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+.card-value{font-size:22px;font-weight:700}
+.card-sub{font-size:12px;color:var(--muted);margin-top:4px}
+.card-sub.c-good{color:var(--good)}
+.card-sub.c-bad{color:var(--bad)}
+.card-sub.c-warn{color:var(--warn)}
+
+/* METRICS BAR */
+.metrics-bar{display:flex;gap:0;background:var(--panel);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:16px}
+.metric{flex:1;padding:14px 16px;border-right:1px solid var(--border);text-align:center}
+.metric:last-child{border-right:none}
+.metric-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px}
+.metric-val{font-size:18px;font-weight:700}
+
+/* TABLES */
+.table-wrap{background:var(--panel);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:16px}
+.table-header{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+.table-header h3{font-size:13px;font-weight:600}
+table{width:100%;border-collapse:collapse}
+th{padding:10px 12px;text-align:left;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);border-bottom:1px solid var(--border)}
+td{padding:10px 12px;border-bottom:1px solid rgba(30,45,74,.5);font-size:12px}
+tr:last-child td{border-bottom:none}
+tr.row-good{background:rgba(0,212,170,.04)}
+tr.row-bad{background:rgba(255,77,109,.04)}
+tr:hover td{background:rgba(61,155,255,.05)}
+.mono{font-family:monospace;font-size:11px}
+.small{font-size:11px}
+.center{text-align:center}
+
+/* COLORS */
+.c-good{color:var(--good)}
+.c-bad{color:var(--bad)}
+.c-warn{color:var(--warn)}
+.accent{color:var(--accent)}
+.muted{color:var(--muted)}
+
+/* BADGES */
+.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;background:var(--panel2);border:1px solid var(--border);text-transform:uppercase}
+.badge-good{background:rgba(0,212,170,.15);border-color:var(--good);color:var(--good)}
+.badge-bad{background:rgba(255,77,109,.15);border-color:var(--bad);color:var(--bad)}
+.badge-warn{background:rgba(245,166,35,.15);border-color:var(--warn);color:var(--warn)}
+
+/* CHARTS */
+.chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
+.chart-box{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px}
+.chart-box h3{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px}
+
+/* HEALTH SCORE */
+.health-wrap{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px}
+.health-score{font-size:64px;font-weight:900;line-height:1;margin:8px 0}
+.health-bar{margin:8px 0 4px;background:var(--panel2);border-radius:4px;height:6px;overflow:hidden}
+.health-bar-fill{height:100%;border-radius:4px;transition:width .5s}
+
+/* ACTIVITY FEED */
+.feed{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px}
+.feed h3{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px}
+.feed-item{display:flex;gap:10px;align-items:baseline;padding:6px 0;border-bottom:1px solid rgba(30,45,74,.4);font-size:12px}
+.feed-item:last-child{border-bottom:none}
+.feed-ts{color:var(--muted);font-family:monospace;font-size:11px;flex-shrink:0;width:50px}
+.feed-bot{font-size:10px;font-weight:600;text-transform:uppercase;color:var(--accent2);flex-shrink:0;width:42px}
+.feed-msg{color:var(--text)}
+
+/* INSIGHTS */
+.insights-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px;margin-bottom:16px}
+.insight-card{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;font-size:12px}
+
+/* RISK */
+.risk-warn{background:rgba(255,77,109,.1);border:1px solid var(--bad);border-radius:8px;padding:12px 16px;margin-bottom:16px;color:var(--bad);font-weight:600}
+.var-box{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:16px}
+.var-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px}
+.var-row:last-child{border-bottom:none}
+
+/* ACCOUNTING */
+.flow-table{background:var(--panel);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:16px}
+.flow-row{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border);font-size:13px}
+.flow-row:last-child{border-bottom:none}
+.flow-row.total{background:var(--panel2);font-weight:700}
+.export-btn{display:inline-block;padding:10px 20px;background:var(--accent);color:#fff;border-radius:8px;font-weight:600;cursor:pointer;font-size:13px;border:none}
+.export-btn:hover{background:#2d8aef}
+
+/* SETTINGS */
+.settings-wrap{background:var(--panel);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:16px}
+.settings-header{padding:12px 16px;border-bottom:1px solid var(--border);font-size:12px;color:var(--muted)}
+
+/* SECTION TITLE */
+.section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin:20px 0 12px}
+
+@media(max-width:900px){
+  .cards-4,.cards-6{grid-template-columns:repeat(2,1fr)}
+  .chart-grid{grid-template-columns:1fr}
+  .metrics-bar{flex-wrap:wrap}
+  .metric{min-width:50%}
+}
 </style>
 </head>
 <body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="topbar-title">DKTrenchBot <span>Terminal</span></div>
+  <div class="topbar-pills">
+    <div class="pill" onclick="navigator.clipboard.writeText('rKQACag8Td9TrMxBwYJPGRMDV8cxGfKsmF')" title="Click to copy">
+      📋 rKQACag8...KsmF
+    </div>
+    <div class="pill">
+      <span class="dot good pulse"></span>
+      DKBot RUNNING
+    </div>
+    <div class="pill">
+      <span class="dot warn"></span>
+      Axiom OFFLINE
+    </div>
+    <div class="pill">💱 XRP <b style="color:var(--accent)">$0.0000</b></div>
+    <div class="pill">😱 F&G <b style="color:var(--bad)">0</b></div>
+    <div class="pill">₿ <b>$0</b></div>
+    <div class="pill">🕐 Updated 2026-04-09 16:50 UTC</div>
+    <div class="pill" style="margin-left:auto">↻ <b id="timer">60s</b></div>
+  </div>
+</div>
+
+<!-- NAV TABS -->
 <div class="wrap">
-<h1><span id="statusDot" class="status-dot off"></span>DKTrenchBot Command Center</h1>
-
-<div class="stats">
-<div class="stat-card"><div class="stat-label">Balance</div><div class="stat-value" id="balance">—</div></div>
-<div class="stat-card"><div class="stat-label">PnL</div><div class="stat-value" id="pnl">—</div></div>
-<div class="stat-card"><div class="stat-label">Trades</div><div class="stat-value" id="trades">0</div></div>
-<div class="stat-card"><div class="stat-label">Win Rate</div><div class="stat-value" id="winRate">0%</div></div>
-<div class="stat-card"><div class="stat-label">Uptime</div><div class="stat-value" id="uptime">0s</div></div>
-<div class="stat-card"><div class="stat-label">ML Phase</div><div class="stat-value" id="mlPhase">—</div></div>
+<div class="tabs">
+  <div class="tab active" onclick="showTab('overview')">📊 Overview</div>
+  <div class="tab" onclick="showTab('dkbot')">🤖 DK Bot</div>
+  <div class="tab" onclick="showTab('axiom')">🗳 Axiom Bot</div>
+  <div class="tab" onclick="showTab('risk')">⚠️ Risk</div>
+  <div class="tab" onclick="showTab('accounting')">💰 Accounting</div>
+  <div class="tab" onclick="showTab('settings')">⚙️ Settings</div>
 </div>
 
-<div class="grid-2">
-<div class="section">
-<h2>Open Positions (<span id="posCount">0</span>)</h2>
-<div id="positions"><div style="color:var(--muted)">No open positions</div></div>
-</div>
-<div class="section">
-<h2>Shadow ML Trades (<span id="shadowCount">0</span>)</h2>
-<div id="shadowTrades" style="max-height:200px;overflow-y:auto"><div style="color:var(--muted)">No shadow trades</div></div>
-</div>
+<!-- ═══════════════════════════════════════════════════════
+     TAB 1: OVERVIEW
+═══════════════════════════════════════════════════════ -->
+<div id="tab-overview" class="tab-content active">
+
+  <div class="cards cards-4">
+    <div class="card">
+      <div class="card-label">Total Portfolio</div>
+      <div class="card-value">141.96 <small style="font-size:14px;color:var(--muted)">XRP</small></div>
+      <div class="card-sub">$0.00 USD</div>
+    </div>
+    <div class="card">
+      <div class="card-label">DKBot Capital</div>
+      <div class="card-value">140.16 <small style="font-size:14px;color:var(--muted)">XRP</small></div>
+      <div class="card-sub c-muted">0 positions open · 0.00 XRP deployed</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Axiom Vault</div>
+      <div class="card-value">0.00 <small style="font-size:14px;color:var(--muted)">XRP</small></div>
+      <div class="card-sub">0 open bets · gas: 0.00 XRP</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Net PnL (since 04/06)</div>
+      <div class="card-value c-good">+0.000 <small style="font-size:14px">XRP</small></div>
+      <div class="card-sub c-good">$+0.00 USD</div>
+    </div>
+  </div>
+
+  <div class="metrics-bar">
+    <div class="metric">
+      <div class="metric-label">Win Rate</div>
+      <div class="metric-val c-bad">0.0%</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Avg Win</div>
+      <div class="metric-val c-good">+0.000</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Avg Loss</div>
+      <div class="metric-val c-bad">+0.000</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Best Trade</div>
+      <div class="metric-val c-good">+0.000</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Total Trades</div>
+      <div class="metric-val">0</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Sharpe</div>
+      <div class="metric-val c-bad">0</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Max Drawdown</div>
+      <div class="metric-val c-bad">0.00 XRP</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Axiom Accuracy</div>
+      <div class="metric-val c-warn">0.0%</div>
+    </div>
+  </div>
+
+  <div class="chart-grid">
+    <div class="chart-box">
+      <h3>Equity Curve — Cumulative PnL (XRP) since reset</h3>
+      <canvas id="equityChart" height="160"></canvas>
+    </div>
+    <div class="health-wrap">
+      <div class="card-label">Bot Health Score</div>
+      <div class="health-score c-warn">50</div>
+      <div class="card-sub" style="margin-bottom:12px">out of 100 — Caution</div>
+      <div class="card-label" style="margin-top:8px">Win Rate</div>
+      <div class="health-bar"><div class="health-bar-fill" style="width:0%;background:var(--bad)"></div></div>
+      <div class="card-label" style="margin-top:8px">Regime</div>
+      <div style="margin-top:4px"><span class="badge badge-warn">NEUTRAL</span>
+        <span class="muted" style="margin-left:8px;font-size:11px">7 consec. losses</span>
+      </div>
+      <div class="card-label" style="margin-top:12px">Trade Count</div>
+      <div class="health-bar"><div class="health-bar-fill" style="width:0%;background:var(--accent)"></div></div>
+      <div style="margin-top:4px;font-size:11px;color:var(--muted)">0 trades since reset</div>
+    </div>
+  </div>
+
+  <div class="section-title">Recent Activity</div>
+  <div class="feed">
+    <h3>Live Feed — Both Bots</h3>
+    <div class="feed-item">
+              <span class="feed-ts">15:43:08</span>
+              <span class="feed-bot">DKBot</span>
+              🟢 <span class="feed-msg">BUY CLUSTER 292.7 XRP score=?</span>
+            </div><div class="feed-item">
+              <span class="feed-ts">15:42:52</span>
+              <span class="feed-bot">DKBot</span>
+              🟢 <span class="feed-msg">BUY CLUSTER 291.6 XRP score=?</span>
+            </div><div class="feed-item">
+              <span class="feed-ts">15:42:29</span>
+              <span class="feed-bot">DKBot</span>
+              🟢 <span class="feed-msg">BUY CLUSTER 286.5 XRP score=?</span>
+            </div><div class="feed-item">
+              <span class="feed-ts">15:41:47</span>
+              <span class="feed-bot">DKBot</span>
+              🔴 <span class="feed-msg">SELL ? pnl=? XRP</span>
+            </div><div class="feed-item">
+              <span class="feed-ts">15:41:43</span>
+              <span class="feed-bot">DKBot</span>
+              🟢 <span class="feed-msg">BUY CLUSTER 285.8 XRP score=?</span>
+            </div><div class="feed-item">
+              <span class="feed-ts">15:41:19</span>
+              <span class="feed-bot">DKBot</span>
+              🔴 <span class="feed-msg">SELL ? pnl=? XRP</span>
+            </div><div class="feed-item">
+              <span class="feed-ts">15:40:50</span>
+              <span class="feed-bot">DKBot</span>
+              🔴 <span class="feed-msg">SELL ? pnl=? XRP</span>
+            </div><div class="feed-item">
+              <span class="feed-ts">15:40:32</span>
+              <span class="feed-bot">DKBot</span>
+              🟢 <span class="feed-msg">BUY CLUSTER 289.9 XRP score=?</span>
+            </div><div class="feed-item">
+              <span class="feed-ts">15:40:22</span>
+              <span class="feed-bot">DKBot</span>
+              🔴 <span class="feed-msg">SELL ? pnl=? XRP</span>
+            </div><div class="feed-item">
+              <span class="feed-ts">15:39:43</span>
+              <span class="feed-bot">DKBot</span>
+              🔴 <span class="feed-msg">SELL ? pnl=? XRP</span>
+            </div><div class="feed-item">
+              <span class="feed-ts">15:39:02</span>
+              <span class="feed-bot">DKBot</span>
+              🔴 <span class="feed-msg">SELL ? pnl=? XRP</span>
+            </div><div class="feed-item">
+              <span class="feed-ts">15:39:02</span>
+              <span class="feed-bot">DKBot</span>
+              🔴 <span class="feed-msg">SELL ? pnl=? XRP</span>
+            </div>
+  </div>
+
 </div>
 
-<div class="section">
-<div class="tab-bar">
-<div class="tab active" onclick="showTab('logs')">Live Logs</div>
-<div class="tab" onclick="showTab('ml')">ML Status</div>
-<div class="tab" onclick="showTab('shadow')">Shadow Stats</div>
-</div>
-<div id="tab-logs" class="tab-content active">
-<div class="log-window" id="logs"></div>
-</div>
-<div id="tab-ml" class="tab-content">
-<div id="mlStatus" style="padding:8px"><div style="color:var(--muted)">Loading ML status...</div></div>
-</div>
-<div id="tab-shadow" class="tab-content">
-<div id="shadowStats" style="padding:8px"><div style="color:var(--muted)">Loading shadow stats...</div></div>
-</div>
+<!-- ═══════════════════════════════════════════════════════
+     TAB 2: DK BOT
+═══════════════════════════════════════════════════════ -->
+<div id="tab-dkbot" class="tab-content">
+
+  <div class="cards cards-6">
+    <div class="card">
+      <div class="card-label">Status</div>
+      <div class="card-value" style="font-size:16px"><span class="dot good" style="margin-right:6px"></span>RUNNING</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Capital</div>
+      <div class="card-value" style="font-size:18px">140.16 XRP</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Open Positions</div>
+      <div class="card-value" style="font-size:18px">0</div>
+      <div class="card-sub">0.00 XRP deployed</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Regime</div>
+      <div class="card-value" style="font-size:18px"><span class="c-warn">NEUTRAL</span></div>
+    </div>
+    <div class="card">
+      <div class="card-label">Win Rate</div>
+      <div class="card-value" style="font-size:18px c-bad">0%</div>
+      <div class="card-sub">0W / 0L</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Realized PnL</div>
+      <div class="card-value c-good" style="font-size:18px">+0.000 XRP</div>
+    </div>
+  </div>
+
+  <div class="section-title">Active Positions</div>
+  <div class="table-wrap">
+    <div class="table-header"><h3>Open Positions</h3></div>
+    <table>
+      <thead><tr>
+        <th>Token</th><th>Entry Price</th><th>Current Price</th>
+        <th>Size XRP</th><th>Unreal PnL</th><th>% Chg</th>
+        <th>Time Held</th><th>Score</th><th>State</th>
+      </tr></thead>
+      <tbody><tr><td colspan="9" class="muted center">No open positions</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="section-title">Trade History <span class="muted" style="font-weight:400;font-size:11px">— post-optimization only (since 2026-04-06)</span></div>
+  <div class="table-wrap">
+    <div class="table-header"><h3>Closed Trades</h3><span class="muted">0 total</span></div>
+    <table>
+      <thead><tr>
+        <th>Time</th><th>Token</th><th>Entry</th><th>Exit</th>
+        <th>Size</th><th>PnL XRP</th><th>PnL %</th><th>Exit Reason</th>
+      </tr></thead>
+      <tbody><tr><td colspan="8" class="muted center">No closed trades since reset (2026-04-06)</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="section-title">Analytics</div>
+  <div class="chart-grid">
+    <div class="chart-box">
+      <h3>PnL by Chart State</h3>
+      <canvas id="stateChart" height="180"></canvas>
+    </div>
+    <div class="chart-box">
+      <h3>Win Rate by Score Band</h3>
+      <canvas id="bandChart" height="180"></canvas>
+    </div>
+  </div>
+
+  <div class="section-title">Self-Learning Module</div>
+  <div class="insights-grid"><div class="insight-card muted">Learning module warming up — needs more trades</div></div>
+
 </div>
 
-<div class="controls">
-<button class="btn btn-start" onclick="fetch('/start',{method:'POST'})">▶ Start</button>
-<button class="btn btn-stop" onclick="fetch('/stop',{method:'POST'})">⏹ Stop</button>
-<button class="btn btn-kill" onclick="fetch('/kill',{method:'POST'})">☠ Kill</button>
-<button class="btn btn-reset" onclick="fetch('/reset',{method:'POST'}).then(()=>location.reload())">↻ Reset</button>
-</div>
+<!-- ═══════════════════════════════════════════════════════
+     TAB 3: AXIOM BOT
+═══════════════════════════════════════════════════════ -->
+<div id="tab-axiom" class="tab-content">
+
+  <div class="cards cards-6">
+    <div class="card">
+      <div class="card-label">Status</div>
+      <div class="card-value" style="font-size:16px"><span class="dot warn" style="margin-right:6px"></span>OFFLINE</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Vault Balance</div>
+      <div class="card-value" style="font-size:18px">0.00 XRP</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Gas Wallet</div>
+      <div class="card-value" style="font-size:18px">0.00 XRP</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Open Bets</div>
+      <div class="card-value" style="font-size:18px">0</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Win Rate (post-reset)</div>
+      <div class="card-value c-bad" style="font-size:18px">0.0%</div>
+      <div class="card-sub">0W / 0L</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Total PnL</div>
+      <div class="card-value c-good" style="font-size:18px">+0.000 XRP</div>
+    </div>
+  </div>
+
+  <div class="section-title">Open Predictions</div>
+  <div class="table-wrap">
+    <div class="table-header"><h3>Open Predictions</h3></div>
+    <table>
+      <thead><tr><th>Market</th><th>Direction</th><th>Stake XRP</th><th>Confidence</th><th>Time Left</th><th>Status</th></tr></thead>
+      <tbody><tr><td colspan="6" class="muted center">No open predictions</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="section-title">Closed Predictions <span class="muted" style="font-weight:400;font-size:11px">— post-optimization only</span></div>
+  <div class="table-wrap">
+    <div class="table-header"><h3>Closed Bets</h3><span class="muted">0 total</span></div>
+    <table>
+      <thead><tr><th>Market</th><th>Direction</th><th>Stake</th><th>Result</th><th>PnL</th><th>Family</th></tr></thead>
+      <tbody><tr><td colspan="6" class="muted center">No closed predictions since reset</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="section-title">Performance by Family</div>
+  <div class="chart-box" style="background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px">
+    <h3 class="chart-box h3">Win Rate & Avg PnL by Family</h3>
+    <canvas id="familyChart" height="160"></canvas>
+  </div>
+
 </div>
 
+<!-- ═══════════════════════════════════════════════════════
+     TAB 4: RISK
+═══════════════════════════════════════════════════════ -->
+<div id="tab-risk" class="tab-content">
+
+  
+
+  <div class="cards cards-4">
+    <div class="card">
+      <div class="card-label">Total Exposed Capital</div>
+      <div class="card-value">0.00 XRP</div>
+      <div class="card-sub">0.0% of portfolio</div>
+    </div>
+    <div class="card">
+      <div class="card-label">DKBot Exposure</div>
+      <div class="card-value c-good">0.0%</div>
+      <div class="card-sub">0.00 XRP in 0 tokens</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Axiom Exposure</div>
+      <div class="card-value c-good">0.0%</div>
+      <div class="card-sub">0.00 XRP vault</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Liquidity Risk</div>
+      <div class="card-value c-good">LOW</div>
+      <div class="card-sub">Meme token illiquidity</div>
+    </div>
+  </div>
+
+  <div class="var-box">
+    <div class="section-title" style="margin-top:0">Value at Risk — Worst Case Scenario</div>
+    <div class="var-row">
+      <span>DKBot max drawdown (all stops hit @ -15%)</span>
+      <span class="c-bad">-0.00 XRP</span>
+    </div>
+    <div class="var-row">
+      <span>Axiom max loss (all open bets lose)</span>
+      <span class="c-bad">-0.00 XRP</span>
+    </div>
+    <div class="var-row">
+      <span>Historical max drawdown</span>
+      <span class="c-bad">-0.00 XRP</span>
+    </div>
+    <div class="var-row" style="font-weight:700">
+      <span>Total worst-case downside</span>
+      <span class="c-bad">-0.00 XRP</span>
+    </div>
+    <div class="var-row">
+      <span>Portfolio after worst case</span>
+      <span class="c-warn">141.96 XRP ($0.00)</span>
+    </div>
+  </div>
+
+  <div class="chart-box" style="background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px">
+    <h3>Capital Exposure Breakdown</h3>
+    <div style="max-width:340px;margin:0 auto">
+      <canvas id="exposureChart" height="240"></canvas>
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     TAB 5: ACCOUNTING
+═══════════════════════════════════════════════════════ -->
+<div id="tab-accounting" class="tab-content">
+
+  <div class="section-title">XRP Flow Statement — Post-Optimization (since 2026-04-06)</div>
+  <div class="flow-table">
+    <div class="flow-row">
+      <span class="muted">Starting Capital (baseline)</span>
+      <span class="mono">140.155 XRP</span>
+    </div>
+    <div class="flow-row">
+      <span>Realized Gains (winning trades)</span>
+      <span class="mono c-good">+0.000 XRP</span>
+    </div>
+    <div class="flow-row">
+      <span>Realized Losses (losing trades)</span>
+      <span class="mono c-bad">0.000 XRP</span>
+    </div>
+    <div class="flow-row">
+      <span class="muted">Est. Fees & Slippage (0.3% of volume)</span>
+      <span class="mono c-warn">-0.000 XRP</span>
+    </div>
+    <div class="flow-row">
+      <span class="muted">Total Volume Traded</span>
+      <span class="mono">0.00 XRP</span>
+    </div>
+    <div class="flow-row total">
+      <span>Net XRP Change</span>
+      <span class="mono c-good">+0.000 XRP (+0.0%)</span>
+    </div>
+    <div class="flow-row total">
+      <span>Current Portfolio Value</span>
+      <span class="mono accent">141.955 XRP · $0.00</span>
+    </div>
+  </div>
+
+  <div class="section-title">Trade Summary</div>
+  <div class="table-wrap">
+    <div class="table-header"><h3>Trade Breakdown</h3></div>
+    <table>
+      <thead><tr><th>Metric</th><th>Value</th></tr></thead>
+      <tbody>
+        <tr><td class="muted">Total Trades</td><td class="mono">0</td></tr>
+        <tr><td class="muted">Winners</td><td class="mono c-good">0</td></tr>
+        <tr><td class="muted">Losers</td><td class="mono c-bad">0</td></tr>
+        <tr><td class="muted">Win Rate</td><td class="mono">0%</td></tr>
+        <tr><td class="muted">Average Win</td><td class="mono c-good">+0.000 XRP</td></tr>
+        <tr><td class="muted">Average Loss</td><td class="mono c-bad">+0.000 XRP</td></tr>
+        <tr><td class="muted">Best Trade</td><td class="mono c-good">+0.000 XRP</td></tr>
+        <tr><td class="muted">Worst Trade</td><td class="mono c-bad">+0.000 XRP</td></tr>
+        <tr><td class="muted">Sharpe Ratio</td><td class="mono">0</td></tr>
+        <tr><td class="muted">Max Drawdown</td><td class="mono c-bad">-0.000 XRP</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <button class="export-btn" onclick="exportCSV()">⬇ Export Trades CSV</button>
+
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     TAB 6: SETTINGS
+═══════════════════════════════════════════════════════ -->
+<div id="tab-settings" class="tab-content">
+
+  <div class="settings-wrap">
+    <div class="settings-header">⚙️ Live Bot Configuration — Read Only · Last generated 2026-04-09 16:50 UTC</div>
+    <table>
+      <thead><tr><th>Parameter</th><th>Value</th></tr></thead>
+      <tbody><tr>
+              <td class="muted">Score Floor (normal entry)</td>
+              <td class="mono accent">45</td>
+            </tr><tr>
+              <td class="muted">Score Floor (elite entry)</td>
+              <td class="mono accent">50</td>
+            </tr><tr>
+              <td class="muted">Normal Position Size (XRP)</td>
+              <td class="mono accent">8.0</td>
+            </tr><tr>
+              <td class="muted">Elite Position Size (XRP)</td>
+              <td class="mono accent">12.0</td>
+            </tr><tr>
+              <td class="muted">Micro-cap Position Size (XRP)</td>
+              <td class="mono accent">5.0</td>
+            </tr><tr>
+              <td class="muted">Hard Stop %</td>
+              <td class="mono accent">15</td>
+            </tr><tr>
+              <td class="muted">Early Stop % (first 30min)</td>
+              <td class="mono accent">0.15</td>
+            </tr><tr>
+              <td class="muted">Min TVL (XRP)</td>
+              <td class="mono accent">100</td>
+            </tr><tr>
+              <td class="muted">Micro-cap TVL Threshold (XRP)</td>
+              <td class="mono accent">5000</td>
+            </tr><tr>
+              <td class="muted">TVL Drain Exit Trigger</td>
+              <td class="mono accent">0.40</td>
+            </tr><tr>
+              <td class="muted">Allowed Chart States</td>
+              <td class="mono accent">"pre_breakout"</td>
+            </tr></tbody>
+    </table>
+  </div>
+
+  <div class="section-title">Axiom Bot Config</div>
+  <div class="settings-wrap">
+    <table>
+      <thead><tr><th>Parameter</th><th>Value</th></tr></thead>
+      <tbody>
+        <tr><td class="muted">Active Families</td><td class="mono accent">hourly_crypto, daily_crypto</td></tr>
+        <tr><td class="muted">Confidence Floor</td><td class="mono accent">0.65</td></tr>
+        <tr><td class="muted">Max Bet Horizon</td><td class="mono accent">48 hours</td></tr>
+        <tr><td class="muted">F&G Filter</td><td class="mono accent">No Higher bets when F&G &lt; 35</td></tr>
+        <tr><td class="muted">Min Edge</td><td class="mono accent">5% hourly / 7% daily</td></tr>
+        <tr><td class="muted">Stake Sizing</td><td class="mono accent">Kelly criterion, 8-10% max per bet</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+</div><!-- /wrap -->
+
+<!-- DATA + JS -->
 <script>
-const API='';
-function fmt(n,d=2){return Number(n).toFixed(d)}
-function fmtTime(s){if(!s||s<0)s=0;if(s<60)return s+'s';if(s<3600)return Math.floor(s/60)+'m '+s%60+'s';return Math.floor(s/3600)+'h '+Math.floor((s%3600)/60)+'m'}
-function showTab(t){document.querySelectorAll('.tab').forEach(el=>el.classList.remove('active'));document.querySelectorAll('.tab-content').forEach(el=>el.classList.remove('active'));event.target.classList.add('active');document.getElementById('tab-'+t).classList.add('active')}
+window.DASH_DATA = {
+  equity:    [],
+  stateLabels: [],
+  statePnl:    [],
+  stateWr:     [],
+  bandLabels:  [],
+  bandWr:      [],
+  afLabels:    ["hourly_crypto", "daily_crypto", "sports"],
+  afWr:        [0, 0, 0],
+  afAvg:       [0, 0, 0],
+  expLabels:   ["Axiom Vault", "Available"],
+  expData:     [0.0, 140.155],
+  trades:      [],
+};
 
-async function refresh(){
- try{
-  const stats=await fetch(API+'/stats').then(r=>r.json());
-  const logs=await fetch(API+'/logs?limit=100').then(r=>r.json());
-  const positions=await fetch(API+'/positions').then(r=>r.json());
-
-  document.getElementById('balance').textContent=fmt(stats.balance,2)+' XRP';
-  const pnlEl=document.getElementById('pnl');
-  pnlEl.textContent=(stats.pnl>=0?'+':'')+fmt(stats.pnl,2)+' XRP';
-  pnlEl.className='stat-value '+(stats.pnl>=0?'good':'bad');
-  document.getElementById('trades').textContent=stats.trades;
-  document.getElementById('winRate').textContent=stats.winRate+'%';
-  document.getElementById('uptime').textContent=fmtTime(stats.uptime||0);
-  document.getElementById('posCount').textContent=stats.positions_count;
-  document.getElementById('statusDot').className='status-dot '+(stats.running?'on':'off');
-  if(stats.ml_phase) document.getElementById('mlPhase').innerHTML='<span class="ml-badge '+(stats.ml_phase==='logging'?'ml-logging':'ml-active')+'">'+stats.ml_phase+'</span>';
-
-  // Positions
-  const posDiv=document.getElementById('positions');
-  if(!positions||positions.length===0){posDiv.innerHTML='<div style="color:var(--muted)">No open positions</div>';}
-  else{posDiv.innerHTML=positions.map(p=>`<div class="pos-row"><span>${p.token}</span><span>${p.size_xrp} XRP</span><span>Entry:${p.entry}</span><span>Now:${p.current}</span><span class="${p.pnl_pct>=0?'good':'bad'}">${p.pnl_pct>=0?'+':''}${p.pnl_pct}%</span></div>`).join('');}
-
-  // Logs
-  const logDiv=document.getElementById('logs');
-  logDiv.innerHTML=logs.map(l=>{let c='info';if(l.includes('SKIP')||l.includes('WARN'))c='warn';if(l.includes('ERROR')||(l.includes('CLOSED')&&l.includes('-')))c='error';return `<div class="log-entry ${c}">${l}</div>`;}).join('');
-  logDiv.scrollTop=logDiv.scrollHeight;
-
-  // Shadow trades
-  try{
-   const shadow=await fetch(API+'/shadow_trades').then(r=>r.json());
-   const stDiv=document.getElementById('shadowTrades');
-   document.getElementById('shadowCount').textContent=shadow.total||0;
-   if(!shadow.trades||shadow.trades.length===0){stDiv.innerHTML='<div style="color:var(--muted)">No shadow trades yet</div>';}
-   else{stDiv.innerHTML=shadow.trades.slice(-10).map(t=>`<div class="shadow-row"><span>${t.token}</span><span>score=${t.score}</span><span>${t.size_xrp} XRP</span><span class="${(t.pnl||0)>=0?'good':'bad'}">${t.status} ${t.pnl!=null?(t.pnl>=0?'+':'')+fmt(t.pnl*100,1)+'%':''}</span></div>`).join('');}
-   // Shadow stats tab
-   document.getElementById('shadowStats').innerHTML=`<p>Shadow Win Rate: <b>${shadow.win_rate||0}%</b></p><p>Shadow PnL: <b class="${(shadow.total_pnl||0)>=0?'good':'bad'}">${(shadow.total_pnl||0)>=0?'+':''}${fmt(shadow.total_pnl||0,4)} XRP</b></p><p>Open Paper Positions: <b>${shadow.open||0}</b></p><p>Total Paper Trades: <b>${shadow.total||0}</b></p>`;
-  }catch(e){console.error('Shadow fetch error:',e)}
-
-  // ML status tab
-  try{
-   const ml=await fetch(API+'/ml_status').then(r=>r.json());
-   document.getElementById('mlStatus').innerHTML=`<p>Phase: <b>${ml.phase||'unknown'}</b></p><p>Features Logged: <b>${ml.features_logged||0}</b></p><p>Trades to Model: <b>${Math.max(0,(ml.trades_needed||50)-(ml.trades_current||0))}</b></p><p>Current Trades: <b>${ml.trades_current||0}</b></p>`;
-   document.getElementById('mlPhase').innerHTML='<span class="ml-badge '+(ml.phase==='logging'?'ml-logging':'ml-active')+'">'+(ml.phase||'?')+'</span>';
-  }catch(e){console.error('ML fetch error:',e)}
- }catch(e){console.error(e)}
+// Tabs
+function showTab(name) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  event.target.classList.add('active');
 }
 
-refresh();
-setInterval(refresh,2000);
+// Timer
+let timeLeft = 60;
+const timerEl = document.getElementById('timer');
+setInterval(() => {
+  timeLeft--;
+  timerEl.textContent = timeLeft + 's';
+  if (timeLeft <= 5) timerEl.classList.add('urgent');
+  if (timeLeft <= 0) location.reload();
+}, 1000);
+
+// Chart defaults
+Chart.defaults.color = '#6b7fa3';
+Chart.defaults.borderColor = '#1e2d4a';
+Chart.defaults.font.family = 'Inter';
+
+const D = window.DASH_DATA;
+
+// 1. Equity curve
+if (D.equity.length > 0) {
+  new Chart(document.getElementById('equityChart'), {
+    type: 'line',
+    data: {
+      labels: D.equity.map(e => e.label),
+      datasets: [{
+        label: 'Cumulative PnL (XRP)',
+        data: D.equity.map(e => e.cumulative),
+        borderColor: '#3d9bff',
+        backgroundColor: 'rgba(61,155,255,.08)',
+        fill: true,
+        tension: .3,
+        pointRadius: 3,
+        pointHoverRadius: 5,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { maxTicksLimit: 6 } },
+        y: { ticks: { callback: v => v.toFixed(2) + ' XRP' } }
+      }
+    }
+  });
+} else {
+  const ctx = document.getElementById('equityChart');
+  if (ctx) {
+    const c = ctx.getContext('2d');
+    c.fillStyle = '#6b7fa3';
+    c.font = '13px Inter';
+    c.textAlign = 'center';
+    c.fillText('No trades since reset — equity curve will appear after first exit', ctx.width/2, 80);
+  }
+}
+
+// 2. PnL by chart state
+if (D.stateLabels.length > 0) {
+  new Chart(document.getElementById('stateChart'), {
+    type: 'bar',
+    data: {
+      labels: D.stateLabels,
+      datasets: [{
+        label: 'Total PnL (XRP)',
+        data: D.statePnl,
+        backgroundColor: D.statePnl.map(v => v >= 0 ? 'rgba(0,212,170,.7)' : 'rgba(255,77,109,.7)'),
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: { x: { ticks: { callback: v => v.toFixed(2) } } }
+    }
+  });
+}
+
+// 3. Score band WR
+if (D.bandLabels.length > 0) {
+  new Chart(document.getElementById('bandChart'), {
+    type: 'bar',
+    data: {
+      labels: D.bandLabels,
+      datasets: [{
+        label: 'Win Rate %',
+        data: D.bandWr,
+        backgroundColor: D.bandWr.map(v => v >= 40 ? 'rgba(0,212,170,.7)' : 'rgba(245,166,35,.7)'),
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: { y: { max: 100, ticks: { callback: v => v + '%' } } }
+    }
+  });
+}
+
+// 4. Family performance
+if (D.afLabels.length > 0) {
+  new Chart(document.getElementById('familyChart'), {
+    type: 'bar',
+    data: {
+      labels: D.afLabels,
+      datasets: [
+        { label: 'Win Rate %', data: D.afWr, backgroundColor: 'rgba(61,155,255,.7)', borderRadius: 4 },
+        { label: 'Avg PnL (XRP)', data: D.afAvg, backgroundColor: 'rgba(123,94,167,.7)', borderRadius: 4 },
+      ]
+    },
+    options: {
+      responsive: true,
+      scales: {
+        y: { ticks: { callback: v => v.toFixed(1) } }
+      }
+    }
+  });
+}
+
+// 5. Exposure doughnut
+if (D.expData.some(v => v > 0)) {
+  new Chart(document.getElementById('exposureChart'), {
+    type: 'doughnut',
+    data: {
+      labels: D.expLabels,
+      datasets: [{
+        data: D.expData,
+        backgroundColor: ['#3d9bff','#00d4aa','#f5a623','#ff4d6d','#7b5ea7','#1e2d4a'],
+        borderWidth: 1,
+        borderColor: '#0d1526',
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { position: 'bottom', labels: { boxWidth: 12, padding: 16 } }
+      }
+    }
+  });
+}
+
+// CSV export
+function exportCSV() {
+  const rows = [['Time','Token','Entry','Exit','Size XRP','PnL XRP','PnL %','Exit Reason','Chart State','Score']];
+  D.trades.forEach(t => {
+    const ts = t.exit_time ? new Date(t.exit_time*1000).toISOString() : '';
+    rows.push([ts, t.symbol||'', t.entry_price||0, t.exit_price||0,
+               t.xrp_spent||0, t.pnl_xrp||0, t.pnl_pct||0,
+               t.exit_reason||'', t.chart_state||'', t.score||0]);
+  });
+  const csv = rows.map(r => r.join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'dktrenchbot_trades.csv';
+  a.click();
+}
 </script>
 </body>
 </html>
