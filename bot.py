@@ -433,7 +433,7 @@ def run_cycle(bot_state: Dict) -> Dict:
                     _price = _c.get("price", 0)
                     if _sym and _price > 0:
                         _market_data[_sym] = {"price": _price}
-                _entered = # _shadow_ml.run_cycle  # DISABLED(candidates, _market_data)
+                # _shadow_ml.run_cycle(candidates, _market_data)  # DISABLED
                 logger.info(f"👻 Shadow ML: evaluated {len(candidates)}, entered {_entered}")
             except Exception as _sle:
                 logger.exception(f"[shadow_ml] cycle error: {_sle}")
@@ -1339,11 +1339,11 @@ def run_cycle(bot_state: Dict) -> Dict:
                         _is_ts_burst = bool(candidate.get("signal_type") == "trustset_velocity" or candidate.get("_burst_mode"))
                         _ts_burst_count = int(candidate.get("burst_count", 0) or candidate.get("trustsets_1h", 0))
                         _ci = {
-                            "wallet_cluster_active": bool(None  # cluster DISABLED(key) if hasattr(cluster_mod, "get_cluster_signal") else False),
+                            "wallet_cluster_active": False,  # DISABLED
                             "alpha_signal_active": bool(_is_ts_burst),
-                            "ts_burst_active": _is_ts_burst,           # explosive early launch signal
-                            "ts_burst_count": _ts_burst_count,         # TrustSets/hr — scales position
-                            "ml_probability": 0.5,  # default; overridden by ML if available
+                            "ts_burst_active": _is_ts_burst,
+                            "ts_burst_count": _ts_burst_count,
+                            "ml_probability": 0.5,
                             "regime": regime,
                             "smart_wallet_count": len(sm_result.get("wallets", [])),
                             "tvl_xrp": _tvl,
