@@ -296,15 +296,8 @@ def run_cycle(bot_state: Dict) -> Dict:
         cycle_wallet_xrp = 0.0
         logger.debug(f"Wallet balance fetch failed: {_wb_e}")
 
-    # ── 0. New token discovery (every 4th cycle ~4min) ───────────────────────
+    # ── 0. Hot token scan (every 4th cycle ~4min) ────────────────────────────
     if _cycle_count % 4 == 1:
-        try:
-            import new_amm_watcher as _naw
-            new_amms = _naw.scan_new_amms()
-            if new_amms:
-                logger.info(f"🆕 {len(new_amms)} new AMM pools detected: {[t['symbol'] for t in new_amms]}")
-        except Exception as _e:
-            logger.debug(f"New AMM scan error: {_e}")
         try:
             import hot_tokens as _ht
             hot = _ht.scan_hot_tokens()
@@ -415,9 +408,14 @@ def run_cycle(bot_state: Dict) -> Dict:
     try:
         scan_results = scanner.scan()
         candidates   = scanner.get_candidates(scan_results)
+        # FIX #4: tag accumulation tokens so they bypass chart_state gate
+        for c in candidates:
+            if c.get("bucket") == "accumulation":
+                c["_accumulation_mode"] = True
         logger.info(f"Scanner: {len(candidates)} candidates | "
                     f"fresh={len(scan_results['fresh_momentum'])} "
-                    f"sustained={len(scan_results['sustained_momentum'])}")
+                    f"sustained={len(scan_results['sustained_momentum'])} "
+                    f"accumulation={len(scan_results.get('accumulation', []))}")
         # Push top candidates to relay
         for c in candidates[:3]:
             relay_bridge.push_signal(symbol=c.get("symbol",""), score=c.get("score",0), chart=c.get("chart_state",""), tvl=c.get("tvl",0), pct=c.get("pct_change",0), regime=bot_state.get("regime","neutral"))
@@ -1111,6 +1109,9 @@ def run_cycle(bot_state: Dict) -> Dict:
                             f"✅ {symbol}: chart_state={chart_state} BYPASSED "
                             f"— fast-path {candidate.get('_godmode_type','burst')} strategy"
                         )
+                    # FIX #4: Accumulation mode — TVL growing, price flat = smart money loading
+                    elif candidate.get("_accumulation_mode"):
+                        logger.info(f"✅ {symbol}: chart_state={chart_state} ALLOWED — accumulation pattern (TVL building)")
                     # Allow continuation/expansion with TrustSet burst
                     elif _is_burst and _burst_count >= 3 and chart_state in ("continuation", "expansion", "accumulation"):
                         logger.info(f"✅ {symbol}: {chart_state} ALLOWED — burst={_burst_count} TrustSets override")

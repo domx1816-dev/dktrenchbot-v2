@@ -185,10 +185,28 @@ def get_amm_tvl(currency: str, issuer: str) -> Optional[float]:
     return None
 
 
+def _validate_issuer(issuer: str) -> bool:
+    """Check if issuer account exists on-chain. Returns False for malformed/non-existent accounts."""
+    try:
+        info_resp = _rpc("account_info", {"account": issuer})
+        if info_resp and isinstance(info_resp, dict):
+            # If we get account_data, the account exists
+            if info_resp.get("account_data"):
+                return True
+            # If error is actMalformed, the address is invalid
+            if info_resp.get("error") == "actMalformed":
+                return False
+        return False
+    except Exception:
+        return False
+
+
 def fetch_xrpl_to_tokens(limit: int = 500) -> List[Dict]:
-    """Fetch tokens sorted by 24h volume from xrpl.to — paginated"""
+    """Fetch tokens sorted by 24h volume from xrpl.to — paginated.
+    Validates issuer accounts exist on-chain before adding to candidates."""
     all_tokens = []
     batch_size = 100
+    skipped_invalid = 0
     try:
         for start in range(0, limit, batch_size):
             r = requests.get(
@@ -216,6 +234,10 @@ def fetch_xrpl_to_tokens(limit: int = 500) -> List[Dict]:
                     continue
                 if int(t.get("trustlines", 0) or 0) < 5:
                     continue
+                # FIX #2: Validate issuer account exists on-chain
+                if not _validate_issuer(issuer):
+                    skipped_invalid += 1
+                    continue
                 all_tokens.append({
                     "name": name,
                     "currency": currency,
@@ -225,7 +247,10 @@ def fetch_xrpl_to_tokens(limit: int = 500) -> List[Dict]:
                     "source": "xrpl_to",
                 })
             time.sleep(0.3)
-        _log(f"xrpl.to: {len(all_tokens)} candidate tokens fetched")
+        if skipped_invalid > 0:
+            _log(f"xrpl.to: {len(all_tokens)} valid tokens ({skipped_invalid} invalid issuers skipped)")
+        else:
+            _log(f"xrpl.to: {len(all_tokens)} candidate tokens fetched")
     except Exception as e:
         _log(f"xrpl.to fetch error: {e}")
     return all_tokens

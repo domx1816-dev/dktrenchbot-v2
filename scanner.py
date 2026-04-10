@@ -245,6 +245,11 @@ def _momentum_bucket(readings: List) -> str:
     """
     Classify token momentum from price history.
     readings: list of {ts, price, tvl}
+    
+    FIX #4: Relaxed thresholds to catch slow accumulation patterns.
+    Tokens with stable TVL and slight upward drift are classified as
+    'accumulation' instead of 'dead' — these often explode 2x-10x
+    once the accumulation phase ends.
     """
     if len(readings) < 2:
         return "fresh_momentum"
@@ -267,7 +272,8 @@ def _momentum_bucket(readings: List) -> str:
     pct_change = (last_price - first_price) / first_price
 
     # Check if price is going up or mostly flat/down
-    if pct_change <= -0.10:
+    # RELAXED: was -10%, now -15% — allow more flat tokens through
+    if pct_change <= -0.15:
         return "dead"
 
     # Count higher lows
@@ -277,6 +283,18 @@ def _momentum_bucket(readings: List) -> str:
             lows.append(prices[i])
 
     n = len(readings)
+
+    # ── FIX #4: Accumulation detection ───────────────────────────────────────
+    # Slow accumulation pattern: TVL growing steadily while price stays flat
+    # This indicates smart money loading positions without spiking the chart
+    if len(tvls) >= 5 and n >= 5:
+        # Check TVL trend (last 5 readings)
+        recent_tvls = tvls[-5:]
+        if len(recent_tvls) >= 3:
+            tvl_growth = (recent_tvls[-1] - recent_tvls[0]) / recent_tvls[0] if recent_tvls[0] > 0 else 0
+            # If TVL grew 10%+ but price stayed flat (±5%), this is accumulation
+            if tvl_growth > 0.10 and abs(pct_change) < 0.05:
+                return "accumulation"  # NEW bucket — slow build before explosion
 
     # SPIKE: check last 2 readings for sudden explosive move (2k→45k type)
     if len(prices) >= 2:
@@ -293,17 +311,29 @@ def _momentum_bucket(readings: List) -> str:
     # Sustained: still moving after many readings
     if pct_change > 0.05 and n > 8:
         return "sustained_momentum"
-    # Weak fresh: any positive move >= 0.5%
-    if pct_change > 0.005:
+    # RELAXED: weak fresh threshold lowered from 0.5% to 0.2%
+    # Catches very slow grinders that haven't exploded yet
+    if pct_change > 0.002:
         return "fresh_momentum"
+    # RELAXED: flat-but-not-declining tokens go to thin_liquidity_trap instead of dead
+    # These might be coiling before a move — give them a chance
+    if pct_change > -0.05:  # within ±5% = flat/coiling
+        return "thin_liquidity_trap"
     else:
         return "dead"
 
 
 def _momentum_score(readings: List, bucket: str) -> float:
-    """Score 0-100 for ranking within bucket. Higher = stronger momentum."""
-    if bucket in ("dead", "thin_liquidity_trap"):
+    """Score 0-100 for ranking within bucket. Higher = stronger momentum.
+    FIX #4: accumulation bucket gets moderate base score — these are coiling springs."""
+    if bucket == "dead":
         return 0.0
+    if bucket == "thin_liquidity_trap":
+        return 5.0  # Small base score — might be coiling
+    if bucket == "accumulation":
+        # Accumulation pattern: TVL growing, price flat = smart money loading
+        # Give moderate score to surface these before they explode
+        return 35.0
 
     if len(readings) < 2:
         return 10.0
@@ -363,6 +393,7 @@ def scan() -> Dict:
         "fresh_momentum": [],
         "sustained_momentum": [],
         "late_extension": [],
+        "accumulation": [],       # FIX #4: slow accumulation before explosion
         "thin_liquidity_trap": [],
         "dead": [],
         "scan_time": now,
@@ -459,7 +490,7 @@ def scan() -> Dict:
         results[bucket].append(token_data)
 
     # Sort each bucket by score desc
-    for bucket in ["fresh_momentum", "sustained_momentum", "late_extension", "thin_liquidity_trap"]:
+    for bucket in ["fresh_momentum", "sustained_momentum", "late_extension", "accumulation", "thin_liquidity_trap"]:
         results[bucket].sort(key=lambda x: x.get("score", 0), reverse=True)
 
     _save_history(history)
@@ -477,9 +508,10 @@ def scan() -> Dict:
 
 
 def get_candidates(results: Dict, min_bucket_score: float = 0.0) -> List[Dict]:
-    """Return tradeable candidates from scan results, sorted by score."""
+    """Return tradeable candidates from scan results, sorted by score.
+    FIX #4: includes accumulation bucket — slow-build tokens before explosion."""
     candidates = []
-    for bucket in ["fresh_momentum", "sustained_momentum"]:
+    for bucket in ["fresh_momentum", "sustained_momentum", "accumulation"]:
         for t in results.get(bucket, []):
             if t.get("score", 0) >= min_bucket_score:
                 candidates.append(t)
@@ -492,6 +524,7 @@ if __name__ == "__main__":
     results = scan()
     print(f"Fresh momentum:     {len(results['fresh_momentum'])}")
     print(f"Sustained momentum: {len(results['sustained_momentum'])}")
+    print(f"Accumulation:       {len(results['accumulation'])}  # FIX #4: slow-build tokens")
     print(f"Late extension:     {len(results['late_extension'])}")
     print(f"Thin liquidity:     {len(results['thin_liquidity_trap'])}")
     print(f"Dead:               {len(results['dead'])}")
