@@ -520,6 +520,15 @@ def classify_and_route(candidate: Dict, price_history: list,
         "token_type":     token_type.value,
         "strategy_score": strat_score,
         "position_size":  size,
+
+        # 🔥 REQUIRED FOR EXECUTION
+        "strategy": strategy,
+
+        "classification": {
+            "type": token_type.value,
+            "confidence": strat_score / 100.0
+        },
+
         "hard_stop_pct":  hard_stop,
         "tp_targets":     tp_targets,
         "token":          token,  # pass Token object for further scoring

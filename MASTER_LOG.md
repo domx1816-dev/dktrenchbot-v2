@@ -1018,3 +1018,21 @@ Previous retry logic only handled `slowDown` errors with linear backoff (1s, 2s,
 Tested with known tokens (PHX, TOW) — RPC calls now succeed after retry instead of returning None.
 
 *Commit: 3874dcd*
+
+## Apr 10 02:03 UTC — Concentration Risk Disabled (Aggressive Mode)
+
+**Changes:**
+- **Concentration Penalty:** REMOVED. Bot will no longer penalize tokens based on holder distribution.
+- **Slippage Cap:** 15% (allows entry into thinner pools).
+- **MC Sweet Spot:** 00–,000 (TVL 100–2,500 XRP).
+- **Target:** Existing and new tokens in the sweet spot.
+
+**Status:**
+- Bot restarted and running (PID 1487).
+- GitHub updated: https://github.com/domx1816-dev/dktrenchbot-v2 (commit acb6a94)
+- Download: https://late-results-sing.loca.lt/dktrenchbot-v2-CONCENTRATION-DISABLED.tar.gz (39 MB)
+
+**Next Steps:**
+- Monitor Cycle 8+ for trade executions.
+- Expect higher volume of candidates due to relaxed filters.
+

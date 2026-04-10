@@ -137,6 +137,10 @@ def execute_trade(
 
     # Strategy confirm gate
     try:
+        if not strategy or not hasattr(strategy, "valid"):
+            logger.error(f"INVALID STRATEGY OBJECT — skipping {token.symbol}")
+            return None
+
         if not strategy.valid(token):
             logger.info(f"[execution_core] {symbol}: strategy.valid()=False")
             return None

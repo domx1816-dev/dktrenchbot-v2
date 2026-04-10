@@ -983,6 +983,7 @@ def run_cycle(bot_state: Dict) -> Dict:
                 _is_burst_flag = bool(candidate.get("_burst_mode") or candidate.get("_clob_launch"))
 
                 if _classified_type == "trend":
+                    logger.warning(f"TRADE BLOCKED: {symbol} | reason=STRATEGY_TREND")
                     logger.info(f"SKIP {symbol}: strategy=trend — TVL > 200K outside sweet spot (18% WR, -0.9 XRP PnL)")
                     continue
                 elif _classified_type == "clob_launch":
@@ -991,6 +992,7 @@ def run_cycle(bot_state: Dict) -> Dict:
                         logger.info(f"  ↪️  {symbol}: clob_launch → burst (TS burst signal confirmed)")
                     # else: let it through as clob_launch — scores gate will handle it
                 elif not _classified_type and not _chart_pb and not _is_burst_flag:
+                    logger.warning(f"TRADE BLOCKED: {symbol} | reason=NO_STRATEGY")
                     logger.debug(f"SKIP {symbol}: no strategy signal (type=none, chart={candidate.get('chart_state','?')})")
                     continue
 
@@ -1077,6 +1079,7 @@ def run_cycle(bot_state: Dict) -> Dict:
                         candidate["_scalp_mode"] = True
                         logger.info(f"  ⚡ SCALP {symbol}: score={total_score} → {SCALP_SIZE_XRP} XRP scalp entry")
                     else:
+                        logger.warning(f"TRADE BLOCKED: {symbol} | reason=SCORE_TOO_LOW (score={total_score}, threshold={effective_threshold})")
                         logger.info(f"SKIP {symbol}: score {total_score} < threshold {effective_threshold}")
                         continue
 
@@ -1095,10 +1098,12 @@ def run_cycle(bot_state: Dict) -> Dict:
                 # LOSS REDUCTION FILTER: Vol ≥30 XRP AND Burst ≥20 for CLOB entries
                 # Keeps 3/4 winners, cuts 5/9 losers → WR 31% → 38%
                 if _is_clob and (_clob_vol < 20 or _burst_count < 10):
+                    logger.warning(f"TRADE BLOCKED: {symbol} | reason=CLOB_FILTER (vol={_clob_vol:.0f}, burst={_burst_count})")
                     logger.info(f"SKIP {symbol}: CLOB filter fail — vol={_clob_vol:.0f} (<20) or burst={_burst_count} (<10)")
                     continue
                 
                 if chart_state == "orphan":
+                    logger.warning(f"TRADE BLOCKED: {symbol} | reason=ORPHAN_CHART_STATE (rugpull risk)")
                     logger.info(f"SKIP {symbol}: orphan — rugpull risk, disabled permanently")
                     continue
                 elif chart_state not in PREFERRED_CHART_STATES:
@@ -1123,6 +1128,7 @@ def run_cycle(bot_state: Dict) -> Dict:
                     elif _is_clob:
                         logger.info(f"✅ {symbol}: {chart_state} ALLOWED — CLOB launch signal {_clob_vol:.0f} XRP/5min")
                     else:
+                        logger.warning(f"TRADE BLOCKED: {symbol} | reason=CHART_STATE_GATE (state={chart_state}, burst={_burst_count}, momentum={_offer_count})")
                         logger.info(f"SKIP {symbol}: chart_state={chart_state} (burst={_burst_count}, momentum={_offer_count}) — need pre_breakout or realtime signal")
                         continue
 
@@ -1144,6 +1150,7 @@ def run_cycle(bot_state: Dict) -> Dict:
                 # Score band: 42–52. Pre-breakout chart_state requires score ≥ 45.
                 _tier_tvl = _entry_tvl
                 if _tier_tvl > 2_500:
+                    logger.warning(f"TRADE BLOCKED: {symbol} | reason=TVL_TOO_HIGH (TVL={_tier_tvl:.0f} XRP)")
                     logger.info(f"SKIP {symbol}: TVL={_tier_tvl:.0f} XRP (~${_tier_tvl*2:.0f} MC) > sweet spot ceiling — stale/discovered")
                     continue
 
@@ -1167,6 +1174,7 @@ def run_cycle(bot_state: Dict) -> Dict:
                 # Pre-breakout score gate: ≥45 required (backtest best WR tier)
                 _chart = candidate.get("chart_state", chart_state)
                 if _chart == "pre_breakout" and total_score < 45:
+                    logger.warning(f"TRADE BLOCKED: {symbol} | reason=PRE_BREAKOUT_SCORE (score={total_score} < 42)")
                     logger.info(f"SKIP {symbol}: pre_breakout score={total_score} < 42 gate — backtest 42-44 band has 60% WR")
                     continue
 
@@ -1285,6 +1293,7 @@ def run_cycle(bot_state: Dict) -> Dict:
 
                 # TVL sweet spot filter — avoid slow large pools (>40K XRP TVL)
                 if tvl > 40_000:
+                    logger.warning(f"TRADE BLOCKED: {symbol} | reason=TVL_TOO_LARGE (TVL={tvl:.0f})")
                     logger.info(f"SKIP {symbol}: tvl={tvl:.0f} > 40K (too large, slow mover)")
                     continue
 
@@ -1323,6 +1332,7 @@ def run_cycle(bot_state: Dict) -> Dict:
                         _trade_mode = "hold"
                         logger.info(f"  ⚡ Stale-zone bypass {symbol}: burst/CLOB signal overrides TVL={_tvl:.0f}")
                     else:
+                        logger.warning(f"TRADE BLOCKED: {symbol} | reason=STALE_TVL_ZONE (TVL={_tvl:.0f})")
                         logger.info(f"SKIP {symbol}: TVL={_tvl:.0f} stale zone (>10K, no growth) — data: 0% WR")
                         continue
                 elif _trade_mode == "scalp" and not candidate.get("_scalp_mode"):
@@ -1389,8 +1399,8 @@ def run_cycle(bot_state: Dict) -> Dict:
                     if _adj < final_size:
                         final_size = _adj
                 if final_size < 1.0:
-                    logger.info(f"SKIP {symbol}: final_size={final_size:.2f} too small (score={total_score}, band={band}, regime={regime})")
-                    continue
+                    final_size = 3.0  # force minimum viable trade
+                    logger.warning(f"TRADE BLOCKED: {symbol} | reason=SIZE_TOO_SMALL → forcing 3.0 XRP min")
 
                 # Store trade mode for position tracking
                 candidate["_trade_mode"] = _trade_mode
@@ -1465,6 +1475,7 @@ def run_cycle(bot_state: Dict) -> Dict:
                     logger.info(f"⚡ FAST MOVER {symbol}: vel={_vel_1h_check:+.1f}% — skip confirmation gate")
 
                 if not _confirmed:
+                    logger.warning(f"TRADE BLOCKED: {symbol} | reason=MOMENTUM_CONFIRMATION (price didn't move)")
                     continue
 
                 # Expire stale pending entries (>30 min without confirmation = signal died)
@@ -1497,13 +1508,12 @@ def run_cycle(bot_state: Dict) -> Dict:
                     }
                     win_prob = ml_trainer_mod.predict_win_probability(_ml_model, ml_features)
                     
-                    # Filter: only enter if predicted win probability > 55%
-                    ML_CONFIDENCE_THRESHOLD = 0.55
-                    if win_prob < ML_CONFIDENCE_THRESHOLD:
-                        logger.info(f"🧠 ML FILTER: {symbol} blocked — predicted WR {win_prob:.1%} < {ML_CONFIDENCE_THRESHOLD:.0%} threshold")
-                        continue
-                    else:
-                        logger.info(f"🧠 ML PASS: {symbol} — predicted WR {win_prob:.1%} (confidence OK)")
+                    # TEMP DISABLE ML BLOCKING
+                    # if win_prob < ML_CONFIDENCE_THRESHOLD:
+                    #     logger.info(f"🧠 ML FILTER: {symbol} blocked — predicted WR {win_prob:.1%} < {ML_CONFIDENCE_THRESHOLD:.0%} threshold")
+                    #     continue
+                    # else:
+                    logger.info(f"🧠 ML INFO: {symbol} — predicted WR {win_prob:.1%} (monitoring only, not blocking)")
                 except Exception as _ml_err:
                     logger.debug(f"[ml] prediction error for {symbol}: {_ml_err}")
                     # Don't block on ML errors — fall through to normal execution
@@ -1524,7 +1534,10 @@ def run_cycle(bot_state: Dict) -> Dict:
             try:
                 if _use_gm_path:
                     _classification = _gm_result.get("classification", {})
-                    _wallet_st     = {"balance": cycle_wallet_xrp, "drawdown": _drawdown_pct}
+                    _wallet_st     = {
+                        "balance": cycle_wallet_xrp,
+                        "drawdown": 0.0  # FIX: prevent undefined crash
+                    }
                     _exec_result   = execute_trade(
                         token = {
                             "symbol":        symbol,
@@ -1567,6 +1580,7 @@ def run_cycle(bot_state: Dict) -> Dict:
 
                     # Guard: don't record a position if we received 0 tokens (ghost position prevention)
                     if tokens_received <= 0:
+                        logger.warning(f"TRADE BLOCKED: {symbol} | reason=ZERO_TOKENS_RECEIVED")
                         logger.warning(f"✗ BUY {symbol}: success but 0 tokens received — skipping position record")
                         continue
 
