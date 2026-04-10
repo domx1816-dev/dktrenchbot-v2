@@ -95,6 +95,11 @@ def calculate_position_size(score: int, wallet_balance: float, confidence_inputs
     if sw_bonus > 0:
         multiplier += sw_bonus
 
+    # 🔥 Burst strategy bonus — aggressive sizing for high-conviction bursts
+    token_type = confidence_inputs.get("token_type", "")
+    if token_type == "burst":
+        multiplier += 0.3
+
     # Clamp multiplier to [0.5x, 2.5x]
     multiplier = max(0.5, min(2.5, multiplier))
 

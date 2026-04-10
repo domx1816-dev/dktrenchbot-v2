@@ -139,13 +139,14 @@ def estimate_book_slippage(book: Dict, xrp_in: float) -> float:
 
 def check_exit_liquidity(amm: Dict, position_xrp: float) -> Tuple[bool, float]:
     """
-    Check if exit liquidity is >= 2x position size.
+    Check if exit liquidity is sufficient for position.
+    Microcap fix: lowered from 2x → 1.2x to allow entries in thinner pools.
     Returns (ok, available_xrp).
     """
     try:
         xrp_in_pool = int(amm["amount"]) / 1e6
         available   = xrp_in_pool  # can always exit into AMM, limited by pool size
-        threshold   = position_xrp * 2
+        threshold   = position_xrp * 1.2  # was 2x, too strict for microcaps
         return available >= threshold, available
     except Exception:
         return False, 0.0

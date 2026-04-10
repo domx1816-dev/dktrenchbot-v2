@@ -1007,11 +1007,15 @@ def run_cycle(bot_state: Dict) -> Dict:
                         regime     = regime,
                         score      = total_score,
                     )
-                    if _disagree_result["verdict"] == "veto":
+                    if _disagree_result["verdict"] == "veto" and total_score < 60:
                         logger.info(
-                            f"🚫 VETO {symbol}: {_disagree_result['reason']}"
+                            f"🚫 VETO {symbol}: {_disagree_result['reason']} (score={total_score} < 60)"
                         )
-                        continue   # hard skip — no overrides
+                        continue   # hard skip for low conviction
+                    elif _disagree_result["verdict"] == "veto" and total_score >= 60:
+                        logger.warning(
+                            f"⚠️ OVERRIDE VETO {symbol}: high conviction score={total_score} ≥ 60, proceeding despite {_disagree_result['reason']}"
+                        )
                     # Apply confidence adjustment to score
                     _adj = _disagree_result.get("confidence_adj", 0)
                     if _adj != 0:
@@ -1449,8 +1453,8 @@ def run_cycle(bot_state: Dict) -> Dict:
                     if len(_prices) >= 3:
                         _chg_recent = (_prices[-1] - _prices[-3]) / _prices[-3] * 100 if _prices[-3] > 0 else 0
                         # DATA: stales = 40% of trades. Require modest movement but not excessive.
-                        # Lowered from 3% → 1.5% — 3% was blocking ALL entries (64+ PENDINGs per token)
-                        if _chg_recent < 1.5:
+                        # Microcap fix: moves often start at 0.5–1.2%, lowered threshold to 0.8%
+                        if _chg_recent < 0.8:
                             # Price hasn't moved yet — put on watch
                             if key not in _pending:
                                 _pending[key] = {"ts": time.time(), "score": total_score, "price": price}
@@ -1474,9 +1478,13 @@ def run_cycle(bot_state: Dict) -> Dict:
                 else:
                     logger.info(f"⚡ FAST MOVER {symbol}: vel={_vel_1h_check:+.1f}% — skip confirmation gate")
 
-                if not _confirmed:
-                    logger.warning(f"TRADE BLOCKED: {symbol} | reason=MOMENTUM_CONFIRMATION (price didn't move)")
+                # 🔥 FAIL-OPEN: Elite signals bypass confirmation gate
+                _is_elite = total_score >= 65 and candidate.get("_fast_path")
+                if not _confirmed and not _is_elite:
+                    logger.warning(f"TRADE BLOCKED: {symbol} | reason=MOMENTUM_CONFIRMATION (price didn't move, score={total_score})")
                     continue
+                elif _is_elite and not _confirmed:
+                    logger.info(f"🔥 FORCE ENTRY {symbol}: high conviction override (score={total_score}, fast_path) — bypassing confirmation gate")
 
                 # Expire stale pending entries (>30 min without confirmation = signal died)
                 _now_ts = time.time()
