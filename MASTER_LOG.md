@@ -5,9 +5,10 @@
 ---
 
 ## Project: DKTrenchBot v2 — XRPL Memecoin Trading Bot
-**Status:** Live (as of Apr 8 2026)
+**Status:** Live (as of Apr 10 2026) — Audit fixes applied
 **Wallet:** rKQACag8Td9TrMxBwYJPGRMDV8cxGfKsmF | Balance: ~197 XRP
 **Dashboard:** https://dktrenchbot.pages.dev
+**Latest Commit:** 8a80aeb — AMM Discovery Audit Fixes (Apr 10 2026)
 
 ---
 
@@ -853,6 +854,62 @@ Applied same fix to `scanner.py` for runtime AMM lookups.
 ba5e5bf — Fix AMM discovery for all currency code formats
 
 *This fix ensures we never miss a memecoin due to AMM lookup failures.*
+
+---
+
+## April 10, 2026 — 00:11 UTC — AMM Discovery Audit Fixes
+
+### Session Summary
+Deep audit of token scanning pipeline identified 4 gaps causing missed opportunities. All fixes implemented, committed (8a80aeb), and pushed to GitHub.
+
+### Root Causes Found
+
+**1. Dead Code:** `new_amm_watcher` import in bot.py referenced non-existent module → silent failures
+**2. Ghost Tokens:** 67 tokens in registry had malformed/non-existent issuer addresses (from xrpl.to API)
+**3. Aggressive Death Classification:** 182 sweet-spot tokens (100-2500 XRP TVL) marked dead despite having AMMs
+**4. No Accumulation Detection:** Slow TVL growth with flat price (smart money loading) was classified as dead
+
+### Changes Applied
+
+#### Fix #1: Removed Dead Code
+- Deleted `new_amm_watcher` import from bot.py (lines 302-307)
+- Module never existed, import always failed silently
+
+#### Fix #2: Issuer Validation in Discovery
+- Added `_validate_issuer()` in `xrpl_amm_discovery.py`
+- Checks if issuer account exists on-chain via `account_info` RPC
+- Filters out 67 ghost tokens with `actMalformed` errors
+- Registry now only contains valid on-chain issuers
+
+#### Fix #3: Relaxed Momentum Thresholds (scanner.py)
+- **Death threshold:** -10% decline → **-15%** (allows more flat tokens through)
+- **Weak fresh detection:** +0.5% → **+0.2%** minimum (catches very slow grinders)
+- **Flat-but-not-declining tokens (±5%):** go to `thin_liquidity_trap` instead of `dead`
+- Impact: More borderline tokens get a chance instead of immediate death
+
+#### Fix #4: NEW "Accumulation" Bucket (CRITICAL)
+- Detects slow accumulation pattern: TVL grew 10%+ over 5 readings, price stayed ±5%
+- Indicates smart money loading positions without spiking chart
+- Base score: **35.0** (moderate — surfaces before explosion)
+- Included in `get_candidates()` alongside fresh/sustained momentum
+- Bot.py tags with `_accumulation_mode=True`, bypasses chart_state gate
+- Log message: `✅ TOKEN: chart_state=X ALLOWED — accumulation pattern (TVL building)`
+
+### Expected Impact
+- **Before:** 27 active candidates in sweet spot (100-2500 XRP TVL)
+- **After:** ~50-80 candidates (includes accumulation tokens)
+- **Ghost tokens pruned:** 67 invalid issuers removed from registry
+- **Missed opportunities recovered:** Catches slow-build patterns before 2x-10x explosive moves
+
+### Files Modified
+- `scanner.py` — momentum logic, accumulation bucket, scoring
+- `bot.py` — removed dead code, accumulation mode handling
+- `xrpl_amm_discovery.py` — issuer validation
+- `AUDIT_FIXES_APR9.md` — full documentation
+
+### Download
+- **GitHub:** https://github.com/domx1816-dev/dktrenchbot-v2 (commit 8a80aeb)
+- **Local backup:** `/home/agent/workspace/trading-bot-v2/state/dktrenchbot-v2-AUDIT-FIXES.tar.gz` (9.3 MB)
 
 ---
 
