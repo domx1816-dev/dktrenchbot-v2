@@ -1851,6 +1851,14 @@ def run_cycle(bot_state: Dict) -> Dict:
                     exit_check = {"exit": True, "partial": False, "reason": f"score_collapse_bq{bq}", "fraction": 1.0}
                     logger.info(f"⚡ {symbol}: BQ collapsed to {bq} with {pnl_now:+.1%} PnL — fast exit")
 
+            # Hard stop: absolute per-trade loss cap at -15% (QuantX patch Apr 10)
+            from config import HARD_STOP_ABSOLUTE_PCT
+            if not exit_check["exit"]:
+                pnl_now = (current_price - pos["entry_price"]) / pos["entry_price"]
+                if pnl_now < -(HARD_STOP_ABSOLUTE_PCT / 100.0):
+                    exit_check = {"exit": True, "partial": False, "reason": f"hard_stop_{HARD_STOP_ABSOLUTE_PCT}%", "fraction": 1.0}
+                    logger.warning(f"🛑 HARD STOP {symbol}: pnl={pnl_now:+.1%} hit -{HARD_STOP_ABSOLUTE_PCT}% floor — emergency exit")
+
             # TVL drain exit: pool being pulled — get out before it's zero
             if not exit_check["exit"] and current_tvl > 0:
                 prev_tvl = pos.get("last_tvl", current_tvl)

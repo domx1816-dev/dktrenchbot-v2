@@ -112,10 +112,11 @@ def get_amm_tvl(currency: str, issuer: str) -> Optional[float]:
     3. Check if issuer account has AMMID field
     4. Scan trustline holders for accounts with AMMID holding this token
     """
-    # Method 1: amm_info RPC (XRP/token)
+    # Method 1: amm_info RPC (XRP/token) — use current ledger for freshest TVL
     result = _rpc("amm_info", {
-        "asset":  {"currency": "XRP"},
-        "asset2": {"currency": currency, "issuer": issuer},
+        "asset":        {"currency": "XRP"},
+        "asset2":       {"currency": currency, "issuer": issuer},
+        "ledger_index": "current",  # QuantX patch Apr 10 — fresher data for scanning
     })
     if result and result.get("status") == "success":
         amm = result.get("amm", {})
@@ -125,10 +126,11 @@ def get_amm_tvl(currency: str, issuer: str) -> Optional[float]:
             except:
                 pass
     
-    # Method 2: amm_info RPC (token/XRP reverse)
+    # Method 2: amm_info RPC (token/XRP reverse) — use current ledger
     result2 = _rpc("amm_info", {
-        "asset":  {"currency": currency, "issuer": issuer},
-        "asset2": {"currency": "XRP"},
+        "asset":        {"currency": currency, "issuer": issuer},
+        "asset2":       {"currency": "XRP"},
+        "ledger_index": "current",  # QuantX patch Apr 10
     })
     if result2 and result2.get("status") == "success":
         amm = result2.get("amm", {})
@@ -138,9 +140,9 @@ def get_amm_tvl(currency: str, issuer: str) -> Optional[float]:
             except:
                 pass
     
-    # Method 3: Check if issuer itself is the AMM (has AMMID)
+    # Method 3: Check if issuer itself is the AMM (has AMMID) — use current ledger
     try:
-        info_resp = _rpc("account_info", {"account": issuer})
+        info_resp = _rpc("account_info", {"account": issuer, "ledger_index": "current"})
         if info_resp and isinstance(info_resp, dict):
             account_data = info_resp.get("account_data", {})
             amm_id = account_data.get("AMMID")

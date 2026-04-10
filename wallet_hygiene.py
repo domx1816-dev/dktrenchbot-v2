@@ -80,14 +80,16 @@ def close_trustline(currency: str, issuer: str) -> bool:
         from xrpl.models.amounts import IssuedCurrencyAmount
         from xrpl.transaction import submit_and_wait
 
+        from xrpl.models.transactions import TrustSetFlag
         wallet = _get_wallet()
         tx = TrustSet(
-            account    = wallet.address,
+            account      = wallet.address,
             limit_amount = IssuedCurrencyAmount(
                 currency = currency,
                 issuer   = issuer,
                 value    = "0",
             ),
+            flags        = TrustSetFlag.TF_SET_NO_RIPPLE,  # QuantX patch Apr 10
         )
         with WebsocketClient(WS_URL) as ws:
             response = submit_and_wait(tx, ws, wallet)

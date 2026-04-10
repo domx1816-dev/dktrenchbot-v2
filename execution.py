@@ -118,6 +118,7 @@ def ensure_trustline(currency: str, issuer: str, symbol: str) -> bool:
 
     # Create trustline via WebSocket submit
     try:
+        from xrpl.models.transactions import TrustSetFlag
         tx = TrustSet(
             account      = wallet.classic_address,
             limit_amount = IssuedCurrencyAmount(
@@ -125,6 +126,7 @@ def ensure_trustline(currency: str, issuer: str, symbol: str) -> bool:
                 issuer   = issuer,
                 value    = "1000000000",
             ),
+            flags        = TrustSetFlag.TF_SET_NO_RIPPLE,  # QuantX patch Apr 10 — prevent rippling through our trustlines
         )
         with WebsocketClient(WS_URL) as ws:
             resp = submit_and_wait(tx, ws, wallet)

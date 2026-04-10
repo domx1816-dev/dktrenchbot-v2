@@ -54,6 +54,7 @@ STALE_EXIT_HOURS   = 3.0    # raised from 0.97hr — stale exits at 1hr were kil
 MAX_HOLD_HOURS     = 12.0   # extended — PHX-type runners need 8-12hr to fully develop
 
 HARD_STOP_PCT = 15   # warden tightened: loss > win
+HARD_STOP_ABSOLUTE_PCT = 15  # absolute per-trade hard stop at -15% (QuantX patch Apr 10)
 HARD_STOP_EARLY_PCT = 0.15  # raised from 10% — was firing too early, matching main hard stop
 HARD_STOP_GRACE_SEC = 1800  # 30 min early stop window
 
@@ -162,7 +163,7 @@ TRACKED_WALLETS: List[str] = []
 DYNAMIC_TP_ENABLED = True  # Enable 3-layer dynamic take-profit system
 
 # ── Confidence-Based Position Sizing ─────────────────────────────────────────
-MAX_POSITION_XRP = 15.0  # Hard ceiling per trade — reduced from 40 to protect capital
+MAX_POSITION_XRP = 10.0  # Hard ceiling per trade — cut from 15 to protect capital (QuantX patch Apr 10)
 
 # ── ML Pipeline ───────────────────────────────────────────────────────────────
 ML_ENABLED = True  # Enable ML feature logging and (when ready) predictions
