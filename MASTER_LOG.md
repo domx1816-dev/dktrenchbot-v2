@@ -1193,3 +1193,103 @@ Added `logger.warning(f"TRADE BLOCKED: {symbol} | reason=...")` at ALL continue 
 
 *Patches applied at 02:48 UTC, April 10, 2026*
 
+---
+
+## Apr 10 03:27 UTC — AGGRESSIVE MODE OPTIMIZATIONS (6 Critical Fixes for Microcap Trading)
+
+### Issue
+Bot was too conservative on microcap entries:
+1. Confirmation gate blocking valid entries (threshold 1.5% too high for microcaps starting at 0.5–1.2%)
+2. Disagreement engine veto killing high-conviction trades
+3. No fail-open path for elite signals
+4. Burst sizing too conservative
+5. Exit liquidity check too strict (2x requirement impossible for microcaps)
+6. Too many "continue" exits causing logic pileup fatigue
+
+### Fixes Applied
+
+#### FIX #1: Fail-Open Path for Elite Signals (bot.py:1481)
+```python
+# BEFORE:
+if not _confirmed:
+    logger.warning(f"TRADE BLOCKED: {symbol} | reason=MOMENTUM_CONFIRMATION")
+    continue
+
+# AFTER:
+_is_elite = total_score >= 65 and candidate.get("_fast_path")
+if not _confirmed and not _is_elite:
+    logger.warning(f"TRADE BLOCKED: {symbol} | reason=MOMENTUM_CONFIRMATION (price didn't move, score={total_score})")
+    continue
+elif _is_elite and not _confirmed:
+    logger.info(f"🔥 FORCE ENTRY {symbol}: high conviction override (score={total_score}, fast_path) — bypassing confirmation gate")
+```
+**Impact**: Elite signals (score ≥65 + fast_path) bypass momentum confirmation entirely.
+
+#### FIX #2: Confirmation Gate Relaxed (bot.py:1453)
+```python
+# BEFORE:
+if _chg_recent < 1.5:  # 1.5% threshold
+
+# AFTER:
+if _chg_recent < 0.8:  # microcap moves often start at 0.5–1.2%
+```
+**Impact**: Catches microcap runners that start with smaller initial moves.
+
+#### FIX #3: Disagreement Engine Override (bot.py:1010)
+```python
+# BEFORE:
+if _disagree_result["verdict"] == "veto":
+    continue   # hard skip — no overrides
+
+# AFTER:
+if _disagree_result["verdict"] == "veto" and total_score < 60:
+    continue   # hard skip for low conviction
+elif _disagree_result["verdict"] == "veto" and total_score >= 60:
+    logger.warning(f"⚠️ OVERRIDE VETO {symbol}: high conviction score={total_score} ≥ 60, proceeding despite {_disagree_result['reason']}")
+```
+**Impact**: High-conviction trades (score ≥60) proceed despite disagreement warnings.
+
+#### FIX #4: Burst Sizing Bonus (sizing.py:96)
+```python
+# ADDED:
+token_type = confidence_inputs.get("token_type", "")
+if token_type == "burst":
+    multiplier += 0.3
+```
+**Impact**: More aggressive position sizing on explosive burst launches.
+
+#### FIX #5: Exit Liquidity Relaxed (route_engine.py:148)
+```python
+# BEFORE:
+threshold = position_xrp * 2  # 2x requirement
+
+# AFTER:
+threshold = position_xrp * 1.2  # microcaps can't meet 2x
+```
+**Impact**: Allows entries in thinner pools where 2x exit liquidity is impossible.
+
+#### FIX #6: Mindset Shift
+Not every filter should block. Some should reduce size or allow overrides for high conviction. Reduced false negatives on microcap runners.
+
+### Files Modified
+- `bot.py` — Fixes #1, #2, #3
+- `sizing.py` — Fix #4
+- `route_engine.py` — Fix #5
+
+### Commits
+- **fa07209** — AGGRESSIVE MODE OPTIMIZATIONS (6 fixes)
+
+### Status
+- **Bot**: Running (restarted at 03:27 UTC)
+- **Dashboard**: Live at https://dig-albums-baker-developed.trycloudflare.com
+- **GitHub**: https://github.com/domx1816-dev/dktrenchbot-v2 (commit fa07209)
+
+### Expected Impact
+- More entries on microcap runners (confirmation gate relaxed)
+- Larger positions on burst tokens (+30% sizing bonus)
+- Fewer false negatives from disagreement engine (high-conviction override)
+- Elite signals never miss due to confirmation timing (fail-open path)
+- Entries in thinner pools now possible (1.2x exit liquidity vs 2x)
+
+*Optimizations applied at 03:27 UTC, April 10, 2026*
+
