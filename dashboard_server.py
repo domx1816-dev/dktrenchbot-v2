@@ -16,6 +16,22 @@ from datetime import datetime
 
 app = FastAPI(title="DKTrenchBot Dashboard API")
 
+# Debug route - test if /api/* routes work at all
+@app.get("/api/debug")
+def api_debug():
+    return {"status": "ok", "message": "API routes are working"}
+
+# Request logging middleware for debugging
+@app.middleware("http")
+async def log_requests(request, call_next):
+    import sys
+    print(f"MIDDLEWARE: {request.method} {request.url.path}", file=sys.stderr)
+    sys.stderr.flush()
+    response = await call_next(request)
+    print(f"MIDDLEWARE RESPONSE: {response.status_code}", file=sys.stderr)
+    sys.stderr.flush()
+    return response
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -190,10 +206,6 @@ def reset():
     return {"status": "reset"}
 
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=5000)
-
 # Serve dashboard HTML
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -300,6 +312,10 @@ def get_ml_status():
 @app.get("/api/status")
 def api_status():
     """Bot health + basic stats (compatible with external dashboard)."""
+    # DEBUG MARKER v2.1 - if you see this in logs, we're using the right file
+    import sys
+    print(f"DEBUG: api_status called from {__file__}", file=sys.stderr)
+    sys.stderr.flush()
     import os, subprocess
     state_file = os.path.join(os.path.dirname(__file__), "state", "state.json")
     regime_file = os.path.join(os.path.dirname(__file__), "state", "regime.json")
@@ -451,3 +467,8 @@ def api_ecosystem():
             "profit_factor": 6.39
         }
     }
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=5000)
+
