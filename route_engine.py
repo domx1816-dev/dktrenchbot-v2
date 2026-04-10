@@ -166,7 +166,7 @@ def evaluate_route(symbol: str, issuer: str, amm: Dict, xrp_in: float) -> Dict:
     exit_ok, exit_liq = check_exit_liquidity(amm, xrp_in)
 
     # Hard filters
-    entry_ok = best_slippage <= 0.12  # Raised from 5% → 12% per operator request
+    entry_ok = best_slippage <= 0.15  # Aggressive: 15% slippage cap for $400-$5K MC range
     trade_ok = entry_ok and exit_ok
 
     result = {

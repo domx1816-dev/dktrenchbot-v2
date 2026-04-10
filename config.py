@@ -44,8 +44,8 @@ MAX_POSITIONS = 999  # no limit - master build in full release mode
 # ── TVL Thresholds ─────────────────────────────────────────────────────────────
 # DATA: Winners cluster in micro TVL (under 3K XRP). Established pools (5K-20K)
 # score high but produce 0% WR. Flip the model.
-MIN_TVL_XRP        = 100    # ~$200 MC floor at $2/XRP — catches full $400-$2K MC sweet spot. Kills true $0 MC dust.
-TVL_MICRO_CAP_XRP  = 5000   # under 5K XRP TVL = micro sizing (was 2K, too tight)
+MIN_TVL_XRP        = 100    # ~$200 MC floor at $2/XRP — catches full $400-$5K MC sweet spot.
+TVL_MICRO_CAP_XRP  = 2500   # 2.5K XRP TVL ≈ $5K MC ceiling. Above this is stale/discovered.
 MIN_TVL_DROP_EXIT  = 0.40   # exit if TVL drops >40% in one cycle (pool draining)
 
 # ── Exit System — 4-tier TP + Tight Stale ─────────────────────────────────────
@@ -55,6 +55,7 @@ MAX_HOLD_HOURS     = 12.0   # extended — PHX-type runners need 8-12hr to fully
 
 HARD_STOP_PCT = 15   # warden tightened: loss > win
 HARD_STOP_ABSOLUTE_PCT = 15  # absolute per-trade hard stop at -15% (QuantX patch Apr 10)
+MAX_SLIPPAGE_PCT = 0.15  # Increased to 15% to catch thinner pools in $400-$5K MC range
 HARD_STOP_EARLY_PCT = 0.15  # raised from 10% — was firing too early, matching main hard stop
 HARD_STOP_GRACE_SEC = 1800  # 30 min early stop window
 
