@@ -22,7 +22,7 @@ BASE_PCT_SMALL = 0.03   # 3% of balance for small (score≥40) — was 6%
 BASE_PCT_SCALP = 0.02   # 2% of balance for scalp/micro — was 3%
 
 # Hard limits per position (safety ceiling)
-MAX_POSITION_XRP = 15.0   # Hard cap per trade — was 100, protect capital
+MAX_POSITION_XRP = 10.0   # Hard cap per trade — cut from 15 (QuantX patch Apr 10)
 MIN_POSITION_XRP = 3.0    # Minimum viable position
 
 
